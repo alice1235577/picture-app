@@ -37,8 +37,9 @@ const App = {
             this.handleScrollEffect();
             this.setupInfiniteScroll();
 
-            setInterval(() => this.updateGreeting(), 10000);
-            setInterval(() => this.pollForUpdates(), 3000); // Tăng tốc độ Radar để nhận tin nhắn cực nhanh
+            // Tối ưu hóa Radar: Chạy ngầm mượt mà không gây giật lag
+            setInterval(() => this.updateGreeting(), 60000); // 1 phút cập nhật lời chào 1 lần
+            setInterval(() => this.pollForUpdates(), 3500);  // 3.5 giây quét dữ liệu mới 1 lần
             
         } catch (error) {
             console.error("Lỗi khởi tạo App:", error);
@@ -49,8 +50,7 @@ const App = {
         const savedTheme = localStorage.getItem('darkMode');
         const hour = new Date().getHours();
         if (savedTheme === null) {
-            if (hour >= 19 || hour < 6) this.state.theme = 'dark';
-            else this.state.theme = 'light';
+            this.state.theme = (hour >= 19 || hour < 6) ? 'dark' : 'light';
         }
     },    
      
@@ -129,20 +129,21 @@ const App = {
         
         // --- NAVIGATION ---
         document.getElementById('navHome')?.addEventListener('click', () => location.reload());
-// --- FIX NÚT MỞ THÔNG BÁO ---
+        
+        // Mở thông báo và ép tắt chấm đỏ
         document.getElementById('openNotificationsBtn')?.addEventListener('click', (e) => {
             e.stopPropagation();
             const notiModal = document.getElementById('notificationsModal');
             if (notiModal) {
                 notiModal.classList.toggle('hidden');
-                
-                // Nếu bảng vừa được mở ra
                 if (!notiModal.classList.contains('hidden')) {
                     this.renderNotifications(); 
-                    this.markNotificationsAsRead(); // Hàm này sẽ ép tắt chấm đỏ ngay lập tức
+                    this.markNotificationsAsRead(); 
                 }
             }
-        });        document.getElementById('openProfileBtn')?.addEventListener('click', () => {
+        });
+
+        document.getElementById('openProfileBtn')?.addEventListener('click', () => {
             this.galleryGrid.classList.add('hidden');
             document.getElementById('headerWrapper').classList.add('hidden'); 
             this.profilePage.classList.remove('hidden'); 
@@ -244,7 +245,7 @@ const App = {
 
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // CHỐNG LOAD LẠI TRANG
+                e.preventDefault(); 
                 const query = e.target.value.trim();
                 if (query) {
                     let recents = JSON.parse(localStorage.getItem('recentSearches') || '[]');
@@ -266,8 +267,7 @@ const App = {
             if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.add('hidden');
         });
 
-        // --- PHOTOSHOP MINI ---
-// --- XỬ LÝ UPLOAD ẢNH (ĐÃ KHÔI PHỤC TÍNH NĂNG CẮT ẢNH) ---
+        // --- XỬ LÝ UPLOAD & CẮT ẢNH MINI PHOTOSHOP ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -275,8 +275,7 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        // CHỈ mở bảng Mini Photoshop, không ép hiện thẳng ảnh ra ngoài
-                        App.openImageEditor(ev.target.result); 
+                        this.openImageEditor(ev.target.result); 
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
@@ -352,9 +351,7 @@ const App = {
             canvas.addEventListener('mouseout', (e) => this.handleCanvasMouseUp(e)); 
         }
         
-        // ===================================================================
-        // HỆ THỐNG NHẮN TIN (CẬP NHẬT ĐỂ ĐỒNG BỘ SUPABASE)
-        // ===================================================================
+        // --- HỆ THỐNG NHẮN TIN (CẬP NHẬT ĐỂ ĐỒNG BỘ SUPABASE) ---
         const messagesPanel = document.getElementById('messagesPanel');
         const chatListView = document.getElementById('chatListView');
         const inviteView = document.getElementById('inviteView');
@@ -364,7 +361,7 @@ const App = {
         if (!App.state.conversations) App.state.conversations = JSON.parse(localStorage.getItem('conversationsData') || '[]');
         const saveConversations = () => localStorage.setItem('conversationsData', JSON.stringify(App.state.conversations));
 
-    const renderChatList = () => {
+        const renderChatList = () => {
             const listEl = document.getElementById('dynamicChatList');
             if (!listEl) return;
             listEl.innerHTML = '';
@@ -392,7 +389,6 @@ const App = {
                 item.innerHTML = `
                     ${avatarHtml}
                     <div style="flex: 1; overflow: hidden;">
-                        <!-- ĐÃ THÊM NOTRANSLATE VÀO CLASS CỦA TÊN -->
                         <strong class="text-primary fs-md notranslate" style="${isUnread ? 'color: var(--danger-color);' : ''}">${otherUser.name}</strong>
                         <span class="text-muted fs-sm" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; ${isUnread ? 'font-weight: 800; color: var(--text-primary);' : ''}">${lastMsg}</span>
                     </div>
@@ -404,11 +400,11 @@ const App = {
         };
         this.renderChatListGlobal = renderChatList;
 
-    const openChatRoom = (chatId, otherUser, otherEmail) => {
+        const openChatRoom = (chatId, otherUser, otherEmail) => {
             App.state.activeChatId = chatId;
             const nameEl = document.getElementById('chatRecipientName');
             nameEl.textContent = otherUser.name;
-            nameEl.classList.add('notranslate'); // ĐÃ THÊM: Cấm dịch tên trên đầu phòng chat
+            nameEl.classList.add('notranslate'); 
 
             const avatarEl = document.getElementById('chatRecipientAvatar');
             if (otherUser.avatar) {
@@ -430,6 +426,7 @@ const App = {
             chatListView.classList.add('hidden');
             chatDetailView.classList.remove('hidden');
         };
+
         const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
@@ -473,7 +470,7 @@ const App = {
             document.getElementById('chatListView').classList.remove('hidden');
         });
 
-    const renderSuggestedUsers = (searchQuery = '') => {
+        const renderSuggestedUsers = (searchQuery = '') => {
             const listEl = document.getElementById('suggestedUsersList');
             if (!listEl) return;
             listEl.innerHTML = '';
@@ -503,7 +500,6 @@ const App = {
                 item.innerHTML = `
                     ${avatarHtml}
                     <div style="flex: 1;">
-                        <!-- ĐÃ THÊM NOTRANSLATE VÀO CLASS CỦA TÊN -->
                         <strong class="text-primary fs-md d-block notranslate">${user.name}</strong>
                         <span class="text-muted fs-sm notranslate">@${user.email.split('@')[0]}</span>
                     </div>
@@ -524,6 +520,7 @@ const App = {
                 listEl.appendChild(item);
             });
         };
+        
         document.getElementById('searchUserInput')?.addEventListener('input', (e) => {
             renderSuggestedUsers(e.target.value.trim());
         });
@@ -564,7 +561,6 @@ const App = {
             });
         }
 
-        // LÕI NHẮN TIN - ĐÃ HACK ĐỂ ĐỒNG BỘ QUA SUPABASE
         const sendMessage = async () => {
             const input = document.getElementById('chatMessageInput');
             const text = input.value.trim();
@@ -586,25 +582,23 @@ const App = {
                 
                 input.value = ''; 
 
-                // Hack: Bắn gói tin nhắn qua hệ thống Notifications của Supabase
+                // Gửi tin nhắn tàng hình để đồng bộ
                 if (targetEmail) {
                     const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
                     let currentNotis = data ? (data.notifications || []) : [];
                     
-                    // CHỈ GIỮ LẠI GÓI TIN NHẮN TÀNG HÌNH (Để đồng bộ Chat, không báo chuông)
                     currentNotis.push({
                         id: Date.now(), type: 'chat_msg', sender: myEmail, text: text, read: false, time: Date.now()
                     });
-                    
-                    // ĐÃ XÓA ĐOẠN TẠO THÔNG BÁO CHUÔNG "vừa gửi cho bạn một tin nhắn" Ở ĐÂY
 
                     await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
                 }
             }
         };
+        
         document.getElementById('sendChatMessageBtn')?.addEventListener('click', sendMessage);
         document.getElementById('chatMessageInput')?.addEventListener('keypress', (e) => { 
-            if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } // CHỐNG F5 KHI NHẤN ENTER
+            if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } 
         });
         
         if (openChatBtn) {
@@ -661,7 +655,7 @@ const App = {
         
         document.getElementById('sendCommentBtn')?.addEventListener('click', () => this.addComment());
         document.getElementById('mainCommentInput')?.addEventListener('keypress', (e) => {
-            if(e.key === 'Enter') { e.preventDefault(); this.addComment(); } // CHỐNG F5 KHI NHẤN ENTER
+            if(e.key === 'Enter') { e.preventDefault(); this.addComment(); } 
         });
 
         const emojiBtn = document.getElementById('emojiBtn');
@@ -727,7 +721,7 @@ const App = {
     },
 
     saveImages() {
-        // Tắt hàm này đi để tránh lỗi QuotaExceededError làm sập trang khi comment
+        // Tắt hàm này để ngăn lỗi tràn bộ nhớ localStorage
     },
 
     compressImage(file, maxWidth, quality) {
@@ -903,6 +897,8 @@ const App = {
                 msgEl.classList.remove('hidden');
             } else {
                 alert("Đăng ký thành công!");
+                // Reload data để fetch user mới
+                this.loadData();
                 this.toggleAuthMode();
             }
         }
@@ -967,7 +963,7 @@ const App = {
         return this.state.allUsers.find(u => u.email === email) || null;
     },
 
-renderGallery(reset = false) {
+    renderGallery(reset = false) {
         if (!this.galleryGrid) return;
         if (!this.state.currentUser) return; 
 
@@ -975,7 +971,7 @@ renderGallery(reset = false) {
             this.galleryGrid.innerHTML = '';
             this.state.page = 1;
             this.state.hasMore = true;
-            this.state.isLoadingMore = false; // CHỐNG KẸT: Ép mở khóa để lưới ảnh được vẽ lại
+            this.state.isLoadingMore = false; 
         }
 
         if (!this.state.hasMore || this.state.isLoadingMore) return;
@@ -1050,7 +1046,8 @@ renderGallery(reset = false) {
             if (end >= filtered.length) this.state.hasMore = false;
         }, 800);
     },
-async saveNewIdea() {
+
+    async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
         if (submitBtn && submitBtn.disabled) return; 
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Đang đăng...'; }
@@ -1086,7 +1083,6 @@ async saveNewIdea() {
             return;
         }
 
-        // ĐÃ SỬA: Ép tải lại toàn bộ dữ liệu từ Supabase để đảm bảo hiện ảnh ngay lập tức
         await this.loadData(); 
         
         this.uploadModal.classList.add('hidden');
@@ -1098,7 +1094,8 @@ async saveNewIdea() {
         document.getElementById('uploadPlaceholder').classList.remove('hidden');
         
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
-    },    
+    },
+    
     openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 
@@ -1206,16 +1203,14 @@ async saveNewIdea() {
         if (!this.profilePage.classList.contains('hidden')) this.renderProfileData('saved');
     },
 
-async toggleLikeDetail() {
+    async toggleLikeDetail() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
-        // Bảo vệ: Bắt buộc phải có ảnh và đã đăng nhập
         if(!img || !this.state.currentUser) return;
         
         const userEmail = this.state.currentUser.email;
         const likedBy = new Set(img.likedBy || []);
         let isLiked = false;
 
-        // Xử lý logic Thêm/Bớt tim
         if (likedBy.has(userEmail)) {
             likedBy.delete(userEmail);
             img.likes = Math.max(0, (img.likes || 1) - 1);
@@ -1227,25 +1222,14 @@ async toggleLikeDetail() {
         
         img.likedBy = Array.from(likedBy);
         
-        // Cập nhật số lượng tim lên Supabase
-        await supabaseClient
-            .from('posts')
-            .update({ likes: img.likes, liked_by: img.likedBy })
-            .eq('id', img.id);
+        await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
 
-        // Cập nhật nút thả tim trên giao diện ngay lập tức
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
         this.renderGallery(); 
 
-        // ---------------------------------------------------------
-        // TÍNH NĂNG MỚI: BẮN THÔNG BÁO CHO TÁC GIẢ KHI ĐƯỢC THẢ TIM
-        // ---------------------------------------------------------
-        // Điều kiện: Bạn vừa "Thích" (chứ không phải bỏ thích) VÀ bạn không phải là chủ của bức ảnh (chống tự sướng)
         if (isLiked && img.owner !== userEmail) {
             const myName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
             const message = `❤️ ${myName} vừa thả tim ảnh "${img.title}" của bạn.`;
-            
-            // Gọi hàm bắn thông báo (truyền ID ảnh để khi đối phương click vào chuông sẽ mở đúng ảnh đó)
             this.pushNotification(img.owner, message, img.id);
         }
     },
@@ -1639,25 +1623,21 @@ async toggleLikeDetail() {
         });
     },
 
-async pushNotification(targetEmail, message, imageId = null) {
+    async pushNotification(targetEmail, message, imageId = null) {
         try {
-            // TUYỆT CHIÊU GIỮ THÔNG BÁO CŨ: Lấy danh sách mới nhất từ Supabase về trước
             const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
             let currentNotis = data && data.notifications ? data.notifications : [];
 
-            // Nhét thông báo mới lên trên cùng
             currentNotis.unshift({ 
                 id: Date.now(), text: message, read: false, 
                 time: new Date().toLocaleString(), imageId: imageId 
             });
             
-            // Cập nhật UI nếu đang gửi cho chính mình
             if (this.state.currentUser && targetEmail === this.state.currentUser.email) {
                 this.state.currentUser.notifications = currentNotis;
                 this.updateNotiBadge();
             }
             
-            // Bắn danh sách đã gộp lên lại Supabase
             await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
         } catch (error) {
             console.error("Lỗi đẩy thông báo:", error);
@@ -1672,10 +1652,10 @@ async pushNotification(targetEmail, message, imageId = null) {
             if(unread > 0) {
                 badge.textContent = unread > 9 ? '9+' : unread; 
                 badge.classList.remove('hidden'); 
-                badge.style.display = 'flex'; // Ép bằng CSS cứng cho hiện
+                badge.style.display = 'flex'; 
             } else {
                 badge.classList.add('hidden'); 
-                badge.style.display = 'none'; // Ép bằng CSS cứng cho ẩn hoàn toàn
+                badge.style.display = 'none'; 
             }
         }
     },
@@ -1723,12 +1703,11 @@ async pushNotification(targetEmail, message, imageId = null) {
         });
     },
             
-async markNotificationsAsRead() {
+    async markNotificationsAsRead() {
         if (!this.state.currentUser) return;
         const notis = this.state.currentUser.notifications || [];
         let hasUnread = false;
 
-        // Quét và chuyển tất cả thành Đã đọc
         notis.forEach(n => { 
             if (!n.read) { 
                 n.read = true; 
@@ -1738,12 +1717,10 @@ async markNotificationsAsRead() {
 
         if (hasUnread) {
             this.state.currentUser.notifications = notis;
-            this.updateNotiBadge(); // CỤC ĐỎ SẼ BIẾN MẤT TỨC THÌ TẠI DÒNG NÀY
+            this.updateNotiBadge(); 
             
-            // Vẽ lại danh sách để bỏ in đậm các dòng chưa đọc
             this.renderNotifications(); 
 
-            // Âm thầm lưu trạng thái đã đọc lên Supabase
             await supabaseClient.from('users').update({ notifications: notis }).eq('email', this.state.currentUser.email);
         }
     },
@@ -1799,12 +1776,48 @@ async markNotificationsAsRead() {
         await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
     },
     
+    async toggleFollow() {
+        const img = this.state.images.find(i => i.id === this.state.activeImageId);
+        if(!img || !this.state.currentUser) return;
+
+        const targetEmail = img.owner;
+        const myEmail = this.state.currentUser.email;
+
+        if (targetEmail === myEmail) return;
+
+        const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
+        if (!targetUser) return;
+
+        if (!this.state.currentUser.following) this.state.currentUser.following = [];
+        if (!targetUser.followers) targetUser.followers = [];
+
+        const isFollowing = this.state.currentUser.following.includes(targetEmail);
+        const followBtn = document.getElementById('followBtn');
+
+        if (isFollowing) {
+            this.state.currentUser.following = this.state.currentUser.following.filter(e => e !== targetEmail);
+            targetUser.followers = targetUser.followers.filter(e => e !== myEmail);
+            if(followBtn) { followBtn.textContent = 'Theo dõi'; followBtn.className = 'btn-primary rounded-pill'; }
+        } else {
+            this.state.currentUser.following.push(targetEmail);
+            targetUser.followers.push(myEmail);
+            if(followBtn) { followBtn.textContent = 'Đang theo dõi'; followBtn.className = 'btn-outline rounded-pill'; }
+        }
+
+        this.updateUIWithUser();
+        
+        await supabaseClient.from('users').update({ following: this.state.currentUser.following }).eq('email', myEmail);
+        await supabaseClient.from('users').update({ followers: targetUser.followers }).eq('email', targetEmail);
+
+        if (!isFollowing) this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
+    },
+
     playSound() {
         const audio = new Audio('https://actions.google.com/sounds/v1/ui/message_notification.ogg');
         audio.play().catch(() => console.log("Trình duyệt tạm thời chặn âm báo động"));
     },
 
-// ==========================================
+    // ==========================================
     // TRÁI TIM CỦA ỨNG DỤNG - RADAR QUÉT REAL-TIME
     // ==========================================
     async pollForUpdates() {
@@ -1893,7 +1906,7 @@ async markNotificationsAsRead() {
             }
 
             // ---------------------------------------------------------
-            // 3. TÍNH NĂNG MỚI: QUÉT ẢNH MỚI (ĐỒNG BỘ TRANG CHỦ REAL-TIME)
+            // 3. QUÉT ẢNH MỚI (ĐỒNG BỘ TRANG CHỦ REAL-TIME)
             // ---------------------------------------------------------
             const { data: latestImage } = await supabaseClient
                 .from('posts')
@@ -1902,10 +1915,11 @@ async markNotificationsAsRead() {
                 .limit(1)
                 .single();
 
-            // Nếu ID của ảnh mới nhất trên mạng LỚN HƠN ID ảnh mới nhất đang hiện trên máy bạn
-            if (latestImage && this.state.images.length > 0) {
-                if (latestImage.id > this.state.images[0].id) {
-                    // Cập nhật lại mảng ảnh và vẽ lại lưới ngay lập tức (Không cần F5)
+            if (latestImage) {
+                // Kiểm tra xem web chưa có ảnh nào HOẶC trên mạng có ảnh mới hơn không
+                const isNewer = this.state.images.length === 0 || latestImage.id > this.state.images[0].id;
+                
+                if (isNewer && !this.state.isLoadingMore) {
                     const { data: newPosts } = await supabaseClient.from('posts').select('*').order('id', { ascending: false });
                     if (newPosts) {
                         this.state.images = newPosts;

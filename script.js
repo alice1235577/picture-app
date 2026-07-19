@@ -591,22 +591,17 @@ const App = {
                     const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
                     let currentNotis = data ? (data.notifications || []) : [];
                     
-                    // Gói tin nhắn tàng hình (để radar đối phương lấy)
+                    // CHỈ GIỮ LẠI GÓI TIN NHẮN TÀNG HÌNH (Để đồng bộ Chat, không báo chuông)
                     currentNotis.push({
                         id: Date.now(), type: 'chat_msg', sender: myEmail, text: text, read: false, time: Date.now()
                     });
                     
-                    // Thông báo rung chuông
-                    currentNotis.unshift({ 
-                        id: Date.now() + 1, text: `💬 ${App.state.currentUser.name} vừa gửi cho bạn một tin nhắn.`, 
-                        read: false, time: new Date().toLocaleString() 
-                    });
+                    // ĐÃ XÓA ĐOẠN TẠO THÔNG BÁO CHUÔNG "vừa gửi cho bạn một tin nhắn" Ở ĐÂY
 
                     await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
                 }
             }
         };
-
         document.getElementById('sendChatMessageBtn')?.addEventListener('click', sendMessage);
         document.getElementById('chatMessageInput')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } // CHỐNG F5 KHI NHẤN ENTER

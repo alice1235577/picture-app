@@ -270,6 +270,9 @@ const App = {
 // =======================================================
         // XỬ LÝ UPLOAD & CÁC NÚT CỦA BẢNG MINI PHOTOSHOP
         // =======================================================
+// =======================================================
+        // 1. CÁC NÚT ĐIỀU KHIỂN BẢNG PHOTOSHOP MINI
+        // =======================================================
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -277,9 +280,10 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        // Kích hoạt bảng Photoshop
-                        if (typeof this.openImageEditor === 'function') {
-                            this.openImageEditor(ev.target.result); 
+                        if (typeof App.openImageEditor === 'function') {
+                            App.openImageEditor(ev.target.result); 
+                        } else {
+                            alert("Lỗi: Không tìm thấy hệ thống xử lý ảnh!");
                         }
                         e.target.value = ''; 
                     };
@@ -288,12 +292,12 @@ const App = {
             });
         }
         
-        // CÁC NÚT ĐIỀU KHIỂN TRONG BẢNG PHOTOSHOP
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
-        document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
+        document.getElementById('saveEditorBtn')?.addEventListener('click', () => App.saveEditedImage());
         
+        // NÚT HOÀN TÁC (RESET) CHUẨN XÁC
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
-            this.resetCanvas();
+            App.resetCanvas();
             const cropBtn = document.getElementById('freeCropBtn');
             const drawBtn = document.getElementById('drawModeBtn');
             const palette = document.getElementById('colorPalette');
@@ -301,22 +305,28 @@ const App = {
             if(cropBtn) { cropBtn.className = 'btn-outline notranslate'; cropBtn.textContent = '✂️ Cắt Tự Do'; }
             if(drawBtn) { drawBtn.className = 'btn-outline notranslate'; drawBtn.textContent = '🖌️ Bật Vẽ'; }
             if(palette) palette.classList.add('hidden');
+            
+            App.state.isCropModeActive = false;
+            App.state.isDrawModeActive = false;
             document.getElementById('imageCanvas').style.cursor = 'default';
         });
         
+        // NÚT CẮT & VẼ
         const freeCropBtn = document.getElementById('freeCropBtn');
         const drawBtn = document.getElementById('drawModeBtn');
         const colorPalette = document.getElementById('colorPalette');
         const brushColor = document.getElementById('brushColor');
         
         freeCropBtn?.addEventListener('click', () => {
-            this.state.isCropModeActive = !this.state.isCropModeActive;
-            if (this.state.isCropModeActive) {
+            App.state.isCropModeActive = !App.state.isCropModeActive;
+            if (App.state.isCropModeActive) {
                 freeCropBtn.className = 'btn-primary notranslate';
                 freeCropBtn.textContent = '✂️ Đang Cắt...';
-                this.state.isDrawModeActive = false; 
+                
+                App.state.isDrawModeActive = false; 
                 if(drawBtn) { drawBtn.className = 'btn-outline notranslate'; drawBtn.textContent = '🖌️ Bật Vẽ'; }
                 if(colorPalette) colorPalette.classList.add('hidden');
+                
                 document.getElementById('imageCanvas').style.cursor = 'crosshair';
             } else {
                 freeCropBtn.className = 'btn-outline notranslate';
@@ -326,13 +336,15 @@ const App = {
         });
 
         drawBtn?.addEventListener('click', () => {
-            this.state.isDrawModeActive = !this.state.isDrawModeActive;
-            if (this.state.isDrawModeActive) {
+            App.state.isDrawModeActive = !App.state.isDrawModeActive;
+            if (App.state.isDrawModeActive) {
                 drawBtn.className = 'btn-primary notranslate';
                 drawBtn.textContent = '🖌️ Đang Vẽ';
                 if(colorPalette) colorPalette.classList.remove('hidden');
-                this.state.isCropModeActive = false; 
+                
+                App.state.isCropModeActive = false; 
                 if(freeCropBtn) { freeCropBtn.className = 'btn-outline notranslate'; freeCropBtn.textContent = '✂️ Cắt Tự Do'; }
+                
                 document.getElementById('imageCanvas').style.cursor = 'crosshair';
             } else {
                 drawBtn.className = 'btn-outline notranslate';
@@ -352,12 +364,11 @@ const App = {
 
         const canvas = document.getElementById('imageCanvas');
         if(canvas) {
-            canvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
-            canvas.addEventListener('mousemove', (e) => this.handleCanvasMouseMove(e));
-            canvas.addEventListener('mouseup', (e) => this.handleCanvasMouseUp(e));
-            canvas.addEventListener('mouseout', (e) => this.handleCanvasMouseUp(e)); 
-        }
-        
+            canvas.addEventListener('mousedown', (e) => App.handleCanvasMouseDown(e));
+            canvas.addEventListener('mousemove', (e) => App.handleCanvasMouseMove(e));
+            canvas.addEventListener('mouseup', (e) => App.handleCanvasMouseUp(e));
+            canvas.addEventListener('mouseout', (e) => App.handleCanvasMouseUp(e)); 
+        }        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
@@ -1074,8 +1085,8 @@ const App = {
             if (end >= filtered.length) this.state.hasMore = false;
         }, 800);
     },
-    // =========================================================
-    // HỆ THỐNG MINI PHOTOSHOP (CANVAS API + NÉN WEBP + CẮT TỰ DO)
+// =========================================================
+    // 2. HỆ THỐNG XỬ LÝ MINI PHOTOSHOP (VẼ & CẮT ẢNH)
     // =========================================================
     openImageEditor(src) {
         if(!this.state.editorImage) this.state.editorImage = new Image();
@@ -1145,7 +1156,8 @@ const App = {
             const y = (e.clientY - rect.top) * scaleY;
             
             const ctx = this.state.drawContext;
-            ctx.lineWidth = document.getElementById('brushSize').value;
+            const brushSizeEl = document.getElementById('brushSize');
+            ctx.lineWidth = brushSizeEl ? brushSizeEl.value : 6;
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.strokeStyle = document.getElementById('brushColor').value;
@@ -1208,7 +1220,8 @@ const App = {
                 this.executeFreeCrop(domX * scaleX, domY * scaleY, domW * scaleX, domH * scaleY);
             }
             
-            document.getElementById('freeCropBtn').click();
+            const freeCropBtn = document.getElementById('freeCropBtn');
+            if(freeCropBtn) freeCropBtn.click(); // Tắt chế độ cắt
         }
     },
 
@@ -1245,7 +1258,6 @@ const App = {
         const modal = document.getElementById('imageEditorModal');
         if (modal) modal.classList.add('hidden');
     },
-
     async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
         

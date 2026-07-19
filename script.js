@@ -267,6 +267,7 @@ const App = {
         });
 
         // --- PHOTOSHOP MINI ---
+// --- XỬ LÝ UPLOAD ẢNH ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -274,14 +275,36 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        this.openImageEditor(ev.target.result); 
+                        const result = ev.target.result;
+                        
+                        // 1. CHẮC CHẮN HIỆN ẢNH TRỰC TIẾP LÊN KHUNG PREVIEW TRƯỚC
+                        const img = document.getElementById('uploadPreviewImg');
+                        const placeholder = document.getElementById('uploadPlaceholder');
+                        
+                        if (img && placeholder) {
+                            img.src = result;
+                            img.classList.remove('hidden');
+                            img.style.display = 'block';
+                            placeholder.classList.add('hidden');
+                            placeholder.style.display = 'none';
+                        }
+
+                        // 2. MỞ MINI PHOTOSHOP (NẾU CÓ) - Dùng Try Catch để chống sập
+                        try {
+                            if (document.getElementById('imageEditorModal')) {
+                                this.openImageEditor(result);
+                            }
+                        } catch(err) {
+                            console.log("Bỏ qua Mini Photoshop");
+                        }
+                        
+                        // Reset input để có thể chọn lại cùng 1 ảnh nếu muốn
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
         }
-
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {

@@ -268,7 +268,6 @@ const App = {
 
         // --- PHOTOSHOP MINI ---
 // --- XỬ LÝ UPLOAD ẢNH ---
-// --- XỬ LÝ UPLOAD ẢNH (KHÔI PHỤC TÍNH NĂNG CẮT ẢNH) ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -276,14 +275,36 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        this.openImageEditor(ev.target.result); // Mở bảng Mini Photoshop
+                        const result = ev.target.result;
+                        
+                        // 1. ÉP ẢNH HIỆN LÊN KHUNG PREVIEW NGAY LẬP TỨC
+                        const img = document.getElementById('uploadPreviewImg');
+                        const placeholder = document.getElementById('uploadPlaceholder');
+                        
+                        if (img && placeholder) {
+                            img.src = result;
+                            img.classList.remove('hidden');
+                            img.style.display = 'block';
+                            placeholder.classList.add('hidden');
+                            placeholder.style.display = 'none';
+                        }
+
+                        // 2. KÍCH HOẠT BẢNG CẮT ẢNH (MINI PHOTOSHOP)
+                        try {
+                            if (typeof this.openImageEditor === 'function') {
+                                this.openImageEditor(result);
+                            }
+                        } catch(err) {
+                            console.log("Lỗi bảng cắt ảnh, nhưng ảnh gốc vẫn được giữ lại:", err);
+                        }
+                        
+                        // Reset input để chọn lại ảnh thoải mái
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
-        }
-        
+        }        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {

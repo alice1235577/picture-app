@@ -1195,14 +1195,16 @@ const App = {
         if (!this.profilePage.classList.contains('hidden')) this.renderProfileData('saved');
     },
 
-    async toggleLikeDetail() {
+async toggleLikeDetail() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
-        if(!img) return;
+        // Bảo vệ: Bắt buộc phải có ảnh và đã đăng nhập
+        if(!img || !this.state.currentUser) return;
         
         const userEmail = this.state.currentUser.email;
         const likedBy = new Set(img.likedBy || []);
         let isLiked = false;
 
+        // Xử lý logic Thêm/Bớt tim
         if (likedBy.has(userEmail)) {
             likedBy.delete(userEmail);
             img.likes = Math.max(0, (img.likes || 1) - 1);
@@ -1214,18 +1216,29 @@ const App = {
         
         img.likedBy = Array.from(likedBy);
         
-        // Cập nhật lên Supabase
-        await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
+        // Cập nhật số lượng tim lên Supabase
+        await supabaseClient
+            .from('posts')
+            .update({ likes: img.likes, liked_by: img.likedBy })
+            .eq('id', img.id);
 
+        // Cập nhật nút thả tim trên giao diện ngay lập tức
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
         this.renderGallery(); 
 
-        // TÍNH NĂNG MỚI: Bắn thông báo khi Thả tim (Không tự thông báo cho chính mình)
+        // ---------------------------------------------------------
+        // TÍNH NĂNG MỚI: BẮN THÔNG BÁO CHO TÁC GIẢ KHI ĐƯỢC THẢ TIM
+        // ---------------------------------------------------------
+        // Điều kiện: Bạn vừa "Thích" (chứ không phải bỏ thích) VÀ bạn không phải là chủ của bức ảnh (chống tự sướng)
         if (isLiked && img.owner !== userEmail) {
-            const authorName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
-            this.pushNotification(img.owner, `❤️ ${authorName} vừa thả tim ảnh "${img.title}" của bạn.`, img.id);
+            const myName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
+            const message = `❤️ ${myName} vừa thả tim ảnh "${img.title}" của bạn.`;
+            
+            // Gọi hàm bắn thông báo (truyền ID ảnh để khi đối phương click vào chuông sẽ mở đúng ảnh đó)
+            this.pushNotification(img.owner, message, img.id);
         }
     },
+    
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';

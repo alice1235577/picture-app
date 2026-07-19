@@ -129,13 +129,24 @@ const App = {
         
         // --- NAVIGATION ---
         document.getElementById('navHome')?.addEventListener('click', () => location.reload());
-        document.getElementById('openNotificationsBtn')?.addEventListener('click', () => {
+// --- FIX NÚT MỞ THÔNG BÁO ---
+        document.getElementById('openNotificationsBtn')?.addEventListener('click', (e) => {
+            e.stopPropagation(); // Ngăn click nhầm
             const notiModal = document.getElementById('notificationsModal');
-            if (notiModal) notiModal.classList.remove('hidden');
-            this.renderNotifications(); 
-            this.markNotificationsAsRead(); 
+            
+            if (notiModal) {
+                notiModal.classList.toggle('hidden'); // Click để Bật/Tắt bảng
+                
+                // Nếu bảng vừa được mở ra
+                if (!notiModal.classList.contains('hidden')) {
+                    // TUYỆT CHIÊU: Đổi trạng thái sang "Đã đọc" và Xóa chấm đỏ TRƯỚC
+                    this.markNotificationsAsRead().then(() => {
+                        // SAU ĐÓ mới vẽ danh sách để các thông báo không bị in đậm
+                        this.renderNotifications(); 
+                    });
+                }
+            }
         });
-
         document.getElementById('openProfileBtn')?.addEventListener('click', () => {
             this.galleryGrid.classList.add('hidden');
             document.getElementById('headerWrapper').classList.add('hidden'); 
@@ -1625,15 +1636,21 @@ const App = {
     },
     
     updateNotiBadge() {
+        if(!this.state.currentUser) return;
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
         const badge = document.getElementById('notificationBadge');
+        
         if(badge) {
             if(unread > 0) {
-                badge.textContent = unread > 9 ? '9+' : unread; badge.classList.remove('hidden'); 
-            } else badge.classList.add('hidden'); 
+                badge.textContent = unread > 9 ? '9+' : unread; 
+                badge.classList.remove('hidden'); 
+                badge.style.display = 'flex'; // Ép buộc CSS hiện
+            } else {
+                badge.classList.add('hidden'); 
+                badge.style.display = 'none'; // Ép buộc CSS ẩn hoàn toàn
+            }
         }
     },
-
     renderNotifications() {
         const listEl = document.getElementById('notificationsList');
         if(!listEl) return;
@@ -1682,15 +1699,22 @@ const App = {
         const notis = this.state.currentUser.notifications || [];
         let hasUnread = false;
 
-        notis.forEach(n => { if (!n.read) { n.read = true; hasUnread = true; } });
+        // Đổi trạng thái sang "Đã đọc" ngay lập tức trên máy tính
+        notis.forEach(n => { 
+            if (!n.read) { 
+                n.read = true; 
+                hasUnread = true; 
+            } 
+        });
 
         if (hasUnread) {
             this.state.currentUser.notifications = notis;
-            this.updateNotiBadge();
+            this.updateNotiBadge(); // Lệnh tắt cục chấm đỏ ngay lập tức
+            
+            // Bắn dữ liệu lên Supabase âm thầm phía sau
             await supabaseClient.from('users').update({ notifications: notis }).eq('email', this.state.currentUser.email);
         }
-    },
-    
+    },    
     openBoardModal(imgId, event = null) {
         if(event) event.stopPropagation();
         this.state.imageToSaveId = imgId;

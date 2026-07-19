@@ -6,6 +6,7 @@ const supabaseClient = supabase.createClient(
 const App = {
 state: {
         currentUser: null,
+        allUsers: [],
         theme: localStorage.getItem('darkMode') === 'true' ? 'dark' : 'light',
         currentTag: 'All',
         searchQuery: '',
@@ -777,22 +778,27 @@ state: {
     },
     
 
-    async loadData() {
-        // Tải toàn bộ ảnh từ Supabase về
-        const { data, error } = await supabaseClient
+async loadData() {
+        // Tải toàn bộ ảnh
+        const { data: postsData, error: postsError } = await supabaseClient
             .from('posts')
             .select('*')
-            .order('id', { ascending: false }); // Lấy bài mới nhất lên trước
+            .order('id', { ascending: false });
 
-        if (error) {
-            console.error("Lỗi tải bài viết:", error);
+        // Tải danh sách User (để lấy Tên thật và Avatar)
+        const { data: usersData, error: usersError } = await supabaseClient
+            .from('users')
+            .select('email, name, avatar');
+
+        if (postsError || usersError) {
+            console.error("Lỗi tải dữ liệu:", postsError || usersError);
         } else {
-            this.state.images = data || [];
-            // Sau khi tải xong dữ liệu, mới bắt đầu vẽ lưới ảnh
+            this.state.images = postsData || [];
+            this.state.allUsers = usersData || []; // Lưu danh sách user vào state
             this.renderGallery(true);
         }
     },
-    saveImages() {
+        saveImages() {
         localStorage.setItem('imagesData', JSON.stringify(this.state.images));
     },
 
@@ -1074,11 +1080,11 @@ state: {
         
         greetingEl.innerHTML = greetingMsg;
     },
-        getUserFromEmail(email) {
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        return users.find(u => u.email === email) || null;
+    getUserFromEmail(email) {
+        // TÌM TRÊN SUPABASE: Lấy tên và avatar chuẩn từ mảng allUsers vừa tải
+        if (!this.state.allUsers) return null;
+        return this.state.allUsers.find(u => u.email === email) || null;
     },
-
 // --- MAIN GALLERY ---
     renderGallery(reset = false) {
         if (!this.galleryGrid) return;
@@ -1657,47 +1663,66 @@ async addComment() {
         }
     },
 
-    saveSettings() {
+    async saveSettings() {
         const newName = document.getElementById('settingName').value.trim();
         const newEmail = document.getElementById('settingEmail').value.trim();
         const oldPass = document.getElementById('settingOldPass').value;
         const newPass = document.getElementById('settingNewPass').value;
-        const is2FA = document.getElementById('setting2FA').checked;
         const msg = document.getElementById('settingMessage');
 
-        if (!newEmail) {
-            msg.textContent = "Email không được bỏ trống!";
+        if (!newEmail || !newName) {
+            msg.textContent = "Tên và Email không được bỏ trống!";
             msg.className = "fs-sm fw-bold text-danger";
             msg.style.display = 'block';
             return;
         }
 
-        if (newPass && oldPass !== this.state.currentUser.password) {
+        if (oldPass && oldPass !== this.state.currentUser.password) {
             msg.textContent = "Mật khẩu hiện tại không đúng!";
             msg.className = "fs-sm fw-bold text-danger";
             msg.style.display = 'block';
             return;
         }
 
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const userIdx = users.findIndex(u => u.email === this.state.currentUser.email);
-        
-        if (userIdx !== -1) {
-            users[userIdx].name = newName;
-            users[userIdx].email = newEmail;
-            users[userIdx].twoFactor = is2FA;
-            if (newPass) users[userIdx].password = newPass;
+        // Đổi nút thành trạng thái đang lưu
+        const saveBtn = document.getElementById('saveSettingsBtn');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = 'Đang lưu...';
+        saveBtn.disabled = true;
+
+        // Chuẩn bị dữ liệu để đẩy lên Supabase
+        const updates = { 
+            name: newName, 
+            email: newEmail 
+        };
+        if (newPass) updates.password = newPass;
+        if (this.state.pendingAvatar) updates.avatar = this.state.pendingAvatar;
+
+        // Bắn lệnh UPDATE lên Supabase
+        const { error } = await supabaseClient
+            .from('users')
+            .update(updates)
+            .eq('email', this.state.currentUser.email);
+
+        if (error) {
+            msg.textContent = "Có lỗi xảy ra, không thể lưu!";
+            msg.className = "fs-sm fw-bold text-danger";
+            msg.style.display = 'block';
+        } else {
+            // Thành công: Cập nhật lại giao diện
+            this.state.currentUser.name = newName;
+            this.state.currentUser.email = newEmail;
+            if (newPass) this.state.currentUser.password = newPass;
             if (this.state.pendingAvatar) {
-                users[userIdx].avatar = this.state.pendingAvatar;
-                this.state.pendingAvatar = null;
+                this.state.currentUser.avatar = this.state.pendingAvatar;
+                this.state.pendingAvatar = null; // Xóa ảnh chờ
             }
 
-            localStorage.setItem('localUsers', JSON.stringify(users));
             localStorage.setItem('currentUser', newEmail);
             
-            this.state.currentUser = users[userIdx];
+            // Tải lại dữ liệu để cập nhật tên tác giả trên toàn bộ web
+            await this.loadData(); 
             this.updateUIWithUser();
-            this.renderGallery(); // Update author names on homepage
 
             msg.textContent = "Lưu cài đặt thành công!";
             msg.className = "fs-sm fw-bold";
@@ -1707,8 +1732,11 @@ async addComment() {
             document.getElementById('settingOldPass').value = '';
             document.getElementById('settingNewPass').value = '';
         }
-    },
 
+        // Mở khóa nút
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
+    },
     // --- TÍNH NĂNG TRỢ LÝ AI TOÀN CẦU (GLOBAL AI CHAT) ---
     setupGlobalAi() {
         const aiPanel = document.getElementById('aiPanel');

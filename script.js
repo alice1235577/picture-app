@@ -38,7 +38,7 @@ state: {
             this.handleScrollEffect();
             this.setupInfiniteScroll();
 
-            setInterval(() => this.updateGreeting(), 60000);
+            setInterval(() => this.updateGreeting(), 10000);
             setInterval(() => this.pollForUpdates(), 1500);
             
         } catch (error) {
@@ -528,9 +528,8 @@ state: {
             if (!listEl) return;
             listEl.innerHTML = '';
             
-            const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-            const myEmail = App.state.currentUser.email;
-            
+            const users = App.state.allUsers || [];
+            const myEmail = App.state.currentUser.email;            
             // Lọc tài khoản (Bỏ qua chính mình & khớp từ khóa)
             const filteredUsers = users.filter(u => 
                 u.email !== myEmail && 
@@ -1349,7 +1348,7 @@ async loadData() {
         document.getElementById('pinOptionsDropdown').classList.add('hidden');
     },
     // --- LƯU (SAVE) & THẢ TIM (LIKE) ---
-async toggleSave(id, btnEl, event) {
+    async toggleSave(id, btnEl, event) {
         if (event) event.stopPropagation();
         if (!this.state.currentUser) return;
         
@@ -1357,29 +1356,24 @@ async toggleSave(id, btnEl, event) {
         const pos = savedList.indexOf(id);
         
         if (pos === -1) {
-            savedList.push(id); // Lưu
+            savedList.push(id);
             if (btnEl) {
-                btnEl.textContent = 'Đã lưu';
-                btnEl.classList.add('saved');
+                btnEl.textContent = 'Đã lưu'; btnEl.classList.add('saved');
                 if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--text-secondary)';
             }
         } else {
-            savedList.splice(pos, 1); // Bỏ lưu
+            savedList.splice(pos, 1);
             if (btnEl) {
-                btnEl.textContent = 'Lưu';
-                btnEl.classList.remove('saved');
+                btnEl.textContent = 'Lưu'; btnEl.classList.remove('saved');
                 if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--accent-color)';
             }
         }
         
         this.state.currentUser.savedIds = savedList;
-
-        // ĐẨY LÊN SUPABASE
-        await supabaseClient
-            .from('users')
-            .update({ savedIds: savedList })
-            .eq('email', this.state.currentUser.email);
+        // Bắn lên Supabase
+        await supabaseClient.from('users').update({ savedIds: savedList }).eq('email', this.state.currentUser.email);
     },
+    
     toggleSaveDetail() {
         this.toggleSave(this.state.activeImageId, document.getElementById('savePinBtn'));
         this.renderGallery();
@@ -1984,35 +1978,24 @@ handleGlobalAiChat() {
     },
 
 // --- 2. HỆ THỐNG THÔNG BÁO ---
-    async pushNotification(targetEmail, message, imageId = null) {
-        // Tìm user nhận thông báo trong danh sách tất cả users
+async pushNotification(targetEmail, message, imageId = null) {
         const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
-        
         if (targetUser) {
             if (!targetUser.notifications) targetUser.notifications = [];
-            
             targetUser.notifications.unshift({ 
-                id: Date.now(), 
-                text: message, 
-                read: false, 
-                time: new Date().toLocaleString(),
-                imageId: imageId 
+                id: Date.now(), text: message, read: false, 
+                time: new Date().toLocaleString(), imageId: imageId 
             });
             
-            // Nếu gửi cho chính mình, cập nhật UI luôn
             if (this.state.currentUser && targetEmail === this.state.currentUser.email) {
                 this.state.currentUser.notifications = targetUser.notifications;
                 this.updateNotiBadge();
             }
-
-            // ĐẨY LÊN SUPABASE
-            await supabaseClient
-                .from('users')
-                .update({ notifications: targetUser.notifications })
-                .eq('email', targetEmail);
+            // Bắn lên Supabase
+            await supabaseClient.from('users').update({ notifications: targetUser.notifications }).eq('email', targetEmail);
         }
     },
-    updateNotiBadge() {
+        updateNotiBadge() {
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
         const badge = document.getElementById('notificationBadge');
         if(badge) {
@@ -2074,30 +2057,19 @@ handleGlobalAiChat() {
             
 async markNotificationsAsRead() {
         if (!this.state.currentUser) return;
-        
         const notis = this.state.currentUser.notifications || [];
         let hasUnread = false;
 
-        // Đánh dấu tất cả là đã đọc
-        notis.forEach(n => {
-            if (!n.read) {
-                n.read = true;
-                hasUnread = true;
-            }
-        });
+        notis.forEach(n => { if (!n.read) { n.read = true; hasUnread = true; } });
 
         if (hasUnread) {
-            // Cập nhật giao diện
             this.state.currentUser.notifications = notis;
             this.updateNotiBadge();
-
-            // ĐẨY LÊN SUPABASE
-            await supabaseClient
-                .from('users')
-                .update({ notifications: notis })
-                .eq('email', this.state.currentUser.email);
+            // Bắn lên Supabase
+            await supabaseClient.from('users').update({ notifications: notis }).eq('email', this.state.currentUser.email);
         }
     },
+    
     // --- 4. HỆ THỐNG BẢNG (BOARDS) ---
     openBoardModal(imgId, event = null) {
         if(event) event.stopPropagation();
@@ -2343,19 +2315,18 @@ async toggleImageInBoard(boardId) {
         if (modal) modal.classList.add('hidden');
     },
 // --- HỆ THỐNG THEO DÕI (FOLLOW) ---
-    async toggleFollow() {
+async toggleFollow() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
         if(!img || !this.state.currentUser) return;
 
         const targetEmail = img.owner;
         const myEmail = this.state.currentUser.email;
 
-        if (targetEmail === myEmail) return; // Không thể tự theo dõi mình
+        if (targetEmail === myEmail) return;
 
         const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
         if (!targetUser) return;
 
-        // Đảm bảo mảng tồn tại
         if (!this.state.currentUser.following) this.state.currentUser.following = [];
         if (!targetUser.followers) targetUser.followers = [];
 
@@ -2363,36 +2334,23 @@ async toggleImageInBoard(boardId) {
         const followBtn = document.getElementById('followBtn');
 
         if (isFollowing) {
-            // Hủy theo dõi
             this.state.currentUser.following = this.state.currentUser.following.filter(e => e !== targetEmail);
             targetUser.followers = targetUser.followers.filter(e => e !== myEmail);
-            
-            if(followBtn) {
-                followBtn.textContent = 'Theo dõi';
-                followBtn.className = 'btn-primary rounded-pill';
-            }
+            if(followBtn) { followBtn.textContent = 'Theo dõi'; followBtn.className = 'btn-primary rounded-pill'; }
         } else {
-            // Bắt đầu theo dõi
             this.state.currentUser.following.push(targetEmail);
             targetUser.followers.push(myEmail);
-            
-            if(followBtn) {
-                followBtn.textContent = 'Đang theo dõi';
-                followBtn.className = 'btn-outline rounded-pill';
-            }
+            if(followBtn) { followBtn.textContent = 'Đang theo dõi'; followBtn.className = 'btn-outline rounded-pill'; }
         }
 
-        this.updateUIWithUser(); // Cập nhật lại số đếm
-
-        // ĐẨY LÊN SUPABASE CÙNG LÚC CẢ 2 NGƯỜI
+        this.updateUIWithUser();
+        
+        // Cập nhật Supabase cho cả 2 người
         await supabaseClient.from('users').update({ following: this.state.currentUser.following }).eq('email', myEmail);
         await supabaseClient.from('users').update({ followers: targetUser.followers }).eq('email', targetEmail);
 
-        if (!isFollowing) {
-            this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
-        }
-    },
-    
+        if (!isFollowing) this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
+    },    
     // =========================================================
     // HỆ THỐNG ÂM THANH & REAL-TIME POLLING (RADAR)
     // =========================================================
@@ -2402,59 +2360,60 @@ async toggleImageInBoard(boardId) {
         audio.play().catch(() => console.log("Trình duyệt tạm thời chặn âm báo động"));
     },
 
-    pollForUpdates() {
+async pollForUpdates() {
         if (!this.state.currentUser) return;
         let shouldPlaySound = false;
 
-        // 1. QUÉT THÔNG BÁO MỚI (CHUÔNG)
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const me = users.find(u => u.email === this.state.currentUser.email);
-        if (me) {
-            const currentUnread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
-            const newUnread = (me.notifications || []).filter(n => !n.read).length;
-            
-            if (newUnread > currentUnread) {
-                shouldPlaySound = true; // Phát hiện có thông báo mới!
-            }
-            this.state.currentUser.notifications = me.notifications;
-            this.updateNotiBadge();
-        }
+        try {
+            // 1. QUÉT THÔNG BÁO TỪ SUPABASE
+            const { data } = await supabaseClient
+                .from('users')
+                .select('notifications')
+                .eq('email', this.state.currentUser.email)
+                .single();
 
-        // 2. QUÉT TIN NHẮN MỚI (CHAT)
-        const chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
-        const myChats = chats.filter(c => c.participants.includes(this.state.currentUser.email));
-        
-        const currentUnreadChats = (this.state.conversations || []).filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
-        const newUnreadChats = myChats.filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
-
-        if (newUnreadChats > currentUnreadChats) {
-            shouldPlaySound = true; // Phát hiện có tin nhắn mới!
-            
-            // Cập nhật giao diện Chat ngay lập tức nếu bạn đang mở bảng
-            const msgPanel = document.getElementById('messagesPanel');
-            if (msgPanel && msgPanel.classList.contains('active')) {
-                this.state.conversations = chats;
-                if(typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
+            if (data) {
+                const currentUnread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
+                const newUnread = (data.notifications || []).filter(n => !n.read).length;
                 
-                // Nếu đang đứng ngay trong phòng chat đó, tự động đọc
-                if (this.state.activeChatId) {
-                    const activeChat = chats.find(c => c.id === this.state.activeChatId);
-                    if (activeChat && activeChat.unreadFor && activeChat.unreadFor.includes(this.state.currentUser.email)) {
-                        activeChat.unreadFor = activeChat.unreadFor.filter(e => e !== this.state.currentUser.email);
-                        localStorage.setItem('conversationsData', JSON.stringify(chats));
-                        if(typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
+                if (newUnread > currentUnread) shouldPlaySound = true;
+                
+                this.state.currentUser.notifications = data.notifications || [];
+                this.updateNotiBadge();
+            }
+
+            // 2. QUÉT TIN NHẮN CHAT (Giữ nguyên dùng localStorage)
+            const chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
+            const myChats = chats.filter(c => c.participants.includes(this.state.currentUser.email));
+            
+            const currentUnreadChats = (this.state.conversations || []).filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
+            const newUnreadChats = myChats.filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
+
+            if (newUnreadChats > currentUnreadChats) {
+                shouldPlaySound = true;
+                const msgPanel = document.getElementById('messagesPanel');
+                if (msgPanel && msgPanel.classList.contains('active')) {
+                    this.state.conversations = chats;
+                    if(typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
+                    
+                    if (this.state.activeChatId) {
+                        const activeChat = chats.find(c => c.id === this.state.activeChatId);
+                        if (activeChat && activeChat.unreadFor && activeChat.unreadFor.includes(this.state.currentUser.email)) {
+                            activeChat.unreadFor = activeChat.unreadFor.filter(e => e !== this.state.currentUser.email);
+                            localStorage.setItem('conversationsData', JSON.stringify(chats));
+                            if(typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
+                        }
                     }
                 }
             }
+            this.state.conversations = chats;
+            this.updateChatBadge();
+
+            if (shouldPlaySound) this.playSound();
+        } catch (error) {
+            console.log("Lỗi radar:", error);
         }
-
-        this.state.conversations = chats;
-        this.updateChatBadge();
-
-        // 3. KÍCH HOẠT ÂM THANH
-        if (shouldPlaySound) this.playSound();
     },
-
     updateChatBadge() {
         if(!this.state.currentUser) return;
         const myChats = (this.state.conversations || []).filter(c => c.participants.includes(this.state.currentUser.email));

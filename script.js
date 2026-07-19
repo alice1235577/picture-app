@@ -1260,13 +1260,8 @@ const App = {
     },
 async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
-        
-        // Khóa nút để chống click đúp
         if (submitBtn && submitBtn.disabled) return; 
-        if (submitBtn) { 
-            submitBtn.disabled = true; 
-            submitBtn.textContent = 'Đang đăng...'; 
-        }
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Đang đăng...'; }
 
         try {
             const titleEl = document.getElementById('uploadTitle');
@@ -1277,6 +1272,7 @@ async saveNewIdea() {
             const title = titleEl ? titleEl.value.trim() : '';
             const desc = descEl ? descEl.value.trim() : '';
             
+            // Lấy Tên thẻ Thể loại
             let category = 'Du lịch';
             if (activeTag) {
                 category = activeTag.dataset.val || activeTag.dataset.filter || activeTag.textContent.trim();
@@ -1288,12 +1284,19 @@ async saveNewIdea() {
                 return;
             }
 
-            // ĐÃ SỬA LỖI TẠI ĐÂY: Trả lại đúng tên cột "description" cho khớp với Supabase cũ của bạn
+            // --- KIỂM TRA DUNG LƯỢNG ẢNH ĐỂ TRÁNH LỖI 400 ---
+            const imageUrl = imgEl.src;
+            if (imageUrl.length > 500000) { // Nếu ảnh > 500KB
+                alert("Ảnh quá nặng! Vui lòng chọn ảnh khác hoặc cắt nhỏ ảnh trước khi đăng.");
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
+                return;
+            }
+
             const newPost = {
                 id: Date.now(), 
-                url: imgEl.src, 
+                url: imageUrl, 
                 title: title, 
-                description: desc, // CHUẨN XÁC
+                description: desc, // Cột trong Supabase của bạn đang là "description"
                 category: category,
                 owner: this.state.currentUser.email, 
                 likes: 0, 
@@ -1304,42 +1307,29 @@ async saveNewIdea() {
             const { error } = await supabaseClient.from('posts').insert([newPost]);
 
             if (error) {
-                console.error("LỖI SUPABASE TRẢ VỀ:", error); 
-                alert("Đăng bài thất bại! Hãy nhấn F12, mở qua tab Console để xem Supabase báo lỗi chính xác là gì nhé.");
+                console.error("Lỗi Supabase:", error);
+                alert("Lỗi lưu dữ liệu. Hãy kiểm tra lại cột 'description' trong bảng 'posts' trên Supabase!");
                 if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
                 return;
             }
 
-            // Đăng thành công -> Tải lại dữ liệu
             await this.loadData(); 
             
+            // Reset form
             const uploadModal = document.getElementById('uploadModal');
             if (uploadModal) uploadModal.classList.add('hidden');
-            
             if (titleEl) titleEl.value = '';
             if (descEl) descEl.value = '';
-            
             imgEl.src = '';
             imgEl.classList.add('hidden');
-            imgEl.style.display = 'none';
-            
-            const placeholder = document.getElementById('uploadPlaceholder');
-            if (placeholder) {
-                placeholder.classList.remove('hidden');
-                placeholder.style.display = 'flex'; 
-            }
+            document.getElementById('uploadPlaceholder').classList.remove('hidden');
             
         } catch (err) {
-            console.error("Lỗi hệ thống khi đăng:", err);
-            alert("Đã xảy ra lỗi không xác định, vui lòng F5 tải lại trang và thử lại.");
+            console.error("Lỗi hệ thống:", err);
         } finally {
-            if (submitBtn) { 
-                submitBtn.disabled = false; 
-                submitBtn.textContent = 'Đăng ý tưởng'; 
-            }
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
         }
-    },
-    
+    },    
     openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 

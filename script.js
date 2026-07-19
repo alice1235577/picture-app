@@ -267,7 +267,7 @@ const App = {
         });
 
         // --- PHOTOSHOP MINI ---
-// --- XỬ LÝ UPLOAD ẢNH ---
+// --- XỬ LÝ UPLOAD ẢNH (ĐÃ KHÔI PHỤC TÍNH NĂNG CẮT ẢNH) ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -275,36 +275,15 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        const result = ev.target.result;
-                        
-                        // 1. ÉP ẢNH HIỆN LÊN KHUNG PREVIEW NGAY LẬP TỨC
-                        const img = document.getElementById('uploadPreviewImg');
-                        const placeholder = document.getElementById('uploadPlaceholder');
-                        
-                        if (img && placeholder) {
-                            img.src = result;
-                            img.classList.remove('hidden');
-                            img.style.display = 'block';
-                            placeholder.classList.add('hidden');
-                            placeholder.style.display = 'none';
-                        }
-
-                        // 2. KÍCH HOẠT BẢNG CẮT ẢNH (MINI PHOTOSHOP)
-                        try {
-                            if (typeof this.openImageEditor === 'function') {
-                                this.openImageEditor(result);
-                            }
-                        } catch(err) {
-                            console.log("Lỗi bảng cắt ảnh, nhưng ảnh gốc vẫn được giữ lại:", err);
-                        }
-                        
-                        // Reset input để chọn lại ảnh thoải mái
+                        // CHỈ mở bảng Mini Photoshop, không ép hiện thẳng ảnh ra ngoài
+                        App.openImageEditor(ev.target.result); 
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
-        }        
+        }
+        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
@@ -1833,13 +1812,13 @@ async markNotificationsAsRead() {
         let shouldPlaySound = false;
 
         try {
-            // Tải thông báo mới nhất từ Supabase
+            // 1. TẢI THÔNG BÁO VÀ TIN NHẮN TỪ SUPABASE
             const { data } = await supabaseClient.from('users').select('notifications').eq('email', this.state.currentUser.email).single();
 
             if (data && data.notifications) {
                 let notis = data.notifications;
                 
-                // 1. TÁCH TIN NHẮN CHAT ẨN DANH VÀ THÔNG BÁO CHUÔNG
+                // TÁCH TIN NHẮN CHAT ẨN DANH VÀ THÔNG BÁO CHUÔNG
                 const chatMsgs = notis.filter(n => n.type === 'chat_msg');
                 const standardNotis = notis.filter(n => n.type !== 'chat_msg');
 
@@ -1857,7 +1836,6 @@ async markNotificationsAsRead() {
                         chat.unreadFor = [this.state.currentUser.email];
                     });
 
-                    // Cập nhật lại UI Chat
                     localStorage.setItem('conversationsData', JSON.stringify(chats));
                     this.state.conversations = chats;
                     this.updateChatBadge();
@@ -1868,11 +1846,10 @@ async markNotificationsAsRead() {
                         if(typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
                     }
 
-                    // Tự dọn dẹp các "gói tin nhắn ẩn" trên Supabase sau khi đã nhận
                     await supabaseClient.from('users').update({ notifications: standardNotis }).eq('email', this.state.currentUser.email);
                 }
 
-                // 2. XỬ LÝ THÔNG BÁO CHUÔNG BÌNH THƯỜNG
+                // XỬ LÝ THÔNG BÁO CHUÔNG BÌNH THƯỜNG
                 const currentUnread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
                 const newUnread = standardNotis.filter(n => !n.read).length;
                 
@@ -1883,10 +1860,9 @@ async markNotificationsAsRead() {
             }
 
             // ---------------------------------------------------------
-            // BƯỚC MỚI: QUÉT BÌNH LUẬN & TIM CỦA ẢNH ĐANG MỞ (REAL-TIME)
+            // 2. QUÉT BÌNH LUẬN & TIM CỦA ẢNH ĐANG MỞ
             // ---------------------------------------------------------
             const detailModal = document.getElementById('detailModal');
-            // CHỈ quét ảnh nếu Modal chi tiết đang được mở (Để web không bị lag)
             if (this.state.activeImageId && detailModal && !detailModal.classList.contains('hidden')) {
                 const { data: latestPost } = await supabaseClient
                     .from('posts')
@@ -1897,16 +1873,14 @@ async markNotificationsAsRead() {
                 if (latestPost) {
                     const localPost = this.state.images.find(img => img.id === this.state.activeImageId);
                     if (localPost) {
-                        // Kiểm tra xem có ai đó vừa Comment/Reply không
                         const localCommentsStr = JSON.stringify(localPost.comments || []);
                         const latestCommentsStr = JSON.stringify(latestPost.comments || []);
                         
                         if (localCommentsStr !== latestCommentsStr) {
                             localPost.comments = latestPost.comments;
-                            this.renderComments(localPost); // Tự động vẽ lại bình luận ngay lập tức!
+                            this.renderComments(localPost); 
                         }
                         
-                        // Cập nhật luôn cả số người Thả tim (nếu có ai đó vừa nhấn thích)
                         if (localPost.likes !== latestPost.likes) {
                             localPost.likes = latestPost.likes;
                             localPost.likedBy = latestPost.liked_by;
@@ -1918,11 +1892,34 @@ async markNotificationsAsRead() {
                 }
             }
 
+            // ---------------------------------------------------------
+            // 3. TÍNH NĂNG MỚI: QUÉT ẢNH MỚI (ĐỒNG BỘ TRANG CHỦ REAL-TIME)
+            // ---------------------------------------------------------
+            const { data: latestImage } = await supabaseClient
+                .from('posts')
+                .select('id')
+                .order('id', { ascending: false })
+                .limit(1)
+                .single();
+
+            // Nếu ID của ảnh mới nhất trên mạng LỚN HƠN ID ảnh mới nhất đang hiện trên máy bạn
+            if (latestImage && this.state.images.length > 0) {
+                if (latestImage.id > this.state.images[0].id) {
+                    // Cập nhật lại mảng ảnh và vẽ lại lưới ngay lập tức (Không cần F5)
+                    const { data: newPosts } = await supabaseClient.from('posts').select('*').order('id', { ascending: false });
+                    if (newPosts) {
+                        this.state.images = newPosts;
+                        this.renderGallery(true); 
+                    }
+                }
+            }
+
             if (shouldPlaySound) this.playSound();
         } catch (error) { 
             console.log("Radar lỗi:", error); 
         }
-    },    
+    },
+    
     updateChatBadge() {
         if(!this.state.currentUser) return;
         const myChats = (this.state.conversations || []).filter(c => c.participants.includes(this.state.currentUser.email));

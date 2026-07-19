@@ -916,40 +916,45 @@ state: {
     },
 
 // --- AUTH LOGIC ---
-checkAuth() {
+    async checkAuth() { 
         const userEmail = localStorage.getItem('currentUser');
         if (userEmail) {
-            // Kiểm tra xem state.currentUser có dữ liệu không
-            const user = this.state.currentUser;
-            
-            // Nếu không tìm thấy thông tin user, không được chạy tiếp
-            if (!user) {
-                console.log("Đang chờ tải user...");
+            // Tải thông tin người dùng từ Supabase thay vì đứng im chờ đợi
+            const { data: user, error } = await supabaseClient
+                .from('users')
+                .select('*')
+                .eq('email', userEmail)
+                .single();
+
+            if (user) {
+                this.state.currentUser = user; // Lưu thông tin người dùng vào bộ nhớ
+
+                // Đảm bảo không bị lỗi thiếu dữ liệu mảng
+                if (!this.state.currentUser.boards) this.state.currentUser.boards = [];
+                if (!this.state.currentUser.followers) this.state.currentUser.followers = [];
+                if (!this.state.currentUser.following) this.state.currentUser.following = [];
+                if (!this.state.currentUser.notifications) this.state.currentUser.notifications = [];
+                if (!this.state.currentUser.savedIds) this.state.currentUser.savedIds = [];
+
+                this.authScreen.classList.add('hidden');
+                this.appEl.classList.remove('hidden');
+                this.updateUIWithUser();
+                this.renderGallery(true); // Đã có thông tin user, bây giờ mới bắt đầu vẽ ảnh!
+                this.applyCustomBackground(); 
+                
+                this.updateNotiBadge();
+                if(typeof this.updateChatBadge === 'function') this.updateChatBadge();
                 return;
             }
-            
-            // Đảm bảo các mảng không bị null (tránh lỗi Cannot read property 'boards'...)
-            if (!user.boards) user.boards = [];
-            if (!user.followers) user.followers = [];
-            if (!user.following) user.following = [];
-            if (!user.notifications) user.notifications = [];
-
-            this.authScreen.classList.add('hidden');
-            this.appEl.classList.remove('hidden');
-            this.updateUIWithUser();
-            this.renderGallery();
-            this.applyCustomBackground(); 
-            
-            this.updateNotiBadge();
-            if(typeof this.updateChatBadge === 'function') this.updateChatBadge();
-            
-            return;
         }
+        
+        // Nếu chưa đăng nhập, hoặc tải lỗi thì hiện màn hình Đăng nhập
         this.appEl.classList.add('hidden');
+        this.authScreen.classList.remove('hidden');
         this.state.currentUser = null;
         this.applyCustomBackground(); 
     },
-        hideAuthMessage() {
+            hideAuthMessage() {
         const msgEl = document.getElementById('authMessage');
         if (msgEl) msgEl.classList.add('hidden');
     },
@@ -1074,10 +1079,22 @@ checkAuth() {
         return users.find(u => u.email === email) || null;
     },
 
-    // --- MAIN GALLERY ---
-    renderGallery() {
+// --- MAIN GALLERY ---
+    renderGallery(reset = false) {
         if (!this.galleryGrid) return;
-        this.galleryGrid.innerHTML = '';
+        
+        // BẢO VỆ: Nếu chưa đăng nhập thì tuyệt đối không được xử lý ảnh để tránh lỗi
+        if (!this.state.currentUser) return; 
+
+        if (reset) {
+            this.galleryGrid.innerHTML = '';
+            this.state.page = 1;
+            this.state.hasMore = true;
+        }
+
+        // TÍNH NĂNG CUỘN VÔ TẬN VÀ PHÂN TRANG
+        if (!this.state.hasMore || this.state.isLoadingMore) return;
+        this.state.isLoadingMore = true;
 
         const filtered = this.state.images.filter(img => {
             const matchTag = this.state.currentTag === 'All' || img.category === this.state.currentTag;
@@ -1085,39 +1102,75 @@ checkAuth() {
             return matchTag && matchSearch;
         });
 
-        filtered.forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'card shadow-large';
-            
-            const isSaved = this.state.currentUser.savedIds.includes(item.id);
-            const userObj = this.getUserFromEmail(item.owner);
-            const authorName = userObj ? userObj.name : item.owner.split('@')[0];
+        const start = (this.state.page - 1) * this.state.limit;
+        const end = start + this.state.limit;
+        const paginatedItems = filtered.slice(start, end);
 
-            card.innerHTML = `
-                <img src="${item.url}" loading="lazy">
-                <div class="card-overlay"></div>
-                <button class="card-save-btn ${isSaved ? 'saved' : ''}" onclick="App.toggleSave(${item.id}, this, event)">
-                    ${isSaved ? 'Đã lưu' : 'Lưu'}
-                </button>
-                <div class="card-details">
-                    <div class="fw-bold mb-1 card-title">${item.title}</div>
-                <div class="fs-sm">Tác giả: <span class="notranslate">${authorName}</span>
-                </div>                
-            `;
+        if (start >= filtered.length && !reset) {
+            this.state.hasMore = false;
+            this.state.isLoadingMore = false;
+            return;
+        }
 
-            card.onclick = () => this.openDetailModal(item);
-            
-            card.querySelector('img').onload = (e) => {
-                const img = e.target;
-                const width = img.getBoundingClientRect().width || 260; 
-                const height = (img.naturalHeight / img.naturalWidth) * width;
-                card.style.gridRowEnd = `span ${Math.ceil((height + 16) / 26)}`; 
-            };
+        // TẠO SKELETON FAKE LOAD (Hiệu ứng khung xương lúc tải)
+        const skeletonIds = [];
+        const loadCount = paginatedItems.length > 0 ? paginatedItems.length : 15;
+        
+        if (paginatedItems.length > 0) {
+            for(let i=0; i < loadCount; i++) {
+                const sid = 'skel_' + Date.now() + i;
+                skeletonIds.push(sid);
+                const s = document.createElement('div');
+                s.id = sid;
+                s.className = 'skeleton-card shadow-large';
+                const h = Math.floor(Math.random() * (350 - 200 + 1) + 200);
+                s.style.gridRowEnd = `span ${Math.ceil((h + 16) / 26)}`;
+                this.galleryGrid.appendChild(s);
+            }
+        }
 
-            this.galleryGrid.appendChild(card);
-        });
+        // Delay 800ms tạo cảm giác lấy dữ liệu
+        setTimeout(() => {
+            // Xóa skeleton
+            skeletonIds.forEach(id => document.getElementById(id)?.remove());
+
+            // Vẽ ảnh thật
+            paginatedItems.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'card shadow-large';
+                
+                // KIỂM TRA ĐÃ LƯU: Hỗ trợ cả 2 chuẩn dữ liệu boards và savedIds
+                const isSaved = (this.state.currentUser.boards || []).some(b => b.ids.includes(item.id)) || (this.state.currentUser.savedIds || []).includes(item.id);
+                
+                const authorUser = this.getUserFromEmail(item.owner);
+                const authorName = authorUser ? authorUser.name : item.owner.split('@')[0];
+
+                card.innerHTML = `
+                    <img src="${item.url}" loading="lazy" style="filter: ${item.filter || 'none'};">
+                    <div class="card-overlay"></div>
+                    <button class="card-save-btn ${isSaved ? 'saved' : ''}" onclick="App.openBoardModal(${item.id}, event)">
+                        ${isSaved ? 'Đã lưu' : 'Lưu'}
+                    </button>
+                    <div class="card-details">
+                        <div class="fw-bold mb-1 card-title">${item.title}</div>
+                        <div class="fs-sm">Tác giả: <span class="notranslate">${authorName}</span></div>
+                    </div>
+                `;
+
+                card.onclick = () => this.openDetailModal(item);
+                card.querySelector('img').onload = (e) => {
+                    const img = e.target;
+                    const width = img.getBoundingClientRect().width || 260; 
+                    const height = (img.naturalHeight / img.naturalWidth) * width;
+                    card.style.gridRowEnd = `span ${Math.ceil((height + 16) / 26)}`; 
+                };
+                this.galleryGrid.appendChild(card);
+            });
+
+            this.state.isLoadingMore = false;
+            if (end >= filtered.length) this.state.hasMore = false;
+        }, 800);
     },
-
     // --- UPLOAD & ĐĂNG BÀI ---
     async saveNewIdea() {
         const title = document.getElementById('uploadTitle').value.trim();

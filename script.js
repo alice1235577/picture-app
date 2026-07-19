@@ -1296,7 +1296,7 @@ async saveNewIdea() {
                 id: Date.now(), 
                 url: imageUrl, 
                 title: title, 
-                description: desc, // Cột trong Supabase của bạn đang là "description"
+                desc: desc, // Cột trong Supabase của bạn đang là "description"
                 category: category,
                 owner: this.state.currentUser.email, 
                 likes: 0, 

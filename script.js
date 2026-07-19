@@ -916,36 +916,40 @@ state: {
     },
 
 // --- AUTH LOGIC ---
-    checkAuth() {
+checkAuth() {
         const userEmail = localStorage.getItem('currentUser');
         if (userEmail) {
-            const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-            const user = users.find(u => u.email === userEmail);
-            if (user) {
-                if (!user.boards) user.boards = [];
-                if (!user.followers) user.followers = [];
-                if (!user.following) user.following = [];
-                if (!user.notifications) user.notifications = [];
-
-                this.state.currentUser = user;
-                this.authScreen.classList.add('hidden');
-                this.appEl.classList.remove('hidden');
-                this.updateUIWithUser();
-                this.renderGallery();
-                this.applyCustomBackground(); 
-                
-                // FIX LỖI "CHUÔNG HẾT ĐỎ": Vẽ cục đỏ ngay khi load trang
-                this.updateNotiBadge();
-                if(typeof this.updateChatBadge === 'function') this.updateChatBadge();
-                
+            // Kiểm tra xem state.currentUser có dữ liệu không
+            const user = this.state.currentUser;
+            
+            // Nếu không tìm thấy thông tin user, không được chạy tiếp
+            if (!user) {
+                console.log("Đang chờ tải user...");
                 return;
             }
+            
+            // Đảm bảo các mảng không bị null (tránh lỗi Cannot read property 'boards'...)
+            if (!user.boards) user.boards = [];
+            if (!user.followers) user.followers = [];
+            if (!user.following) user.following = [];
+            if (!user.notifications) user.notifications = [];
+
+            this.authScreen.classList.add('hidden');
+            this.appEl.classList.remove('hidden');
+            this.updateUIWithUser();
+            this.renderGallery();
+            this.applyCustomBackground(); 
+            
+            this.updateNotiBadge();
+            if(typeof this.updateChatBadge === 'function') this.updateChatBadge();
+            
+            return;
         }
         this.appEl.classList.add('hidden');
         this.state.currentUser = null;
         this.applyCustomBackground(); 
     },
-    hideAuthMessage() {
+        hideAuthMessage() {
         const msgEl = document.getElementById('authMessage');
         if (msgEl) msgEl.classList.add('hidden');
     },

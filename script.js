@@ -1,10 +1,11 @@
-// Khởi tạo Supabase (Thay đoạn này vào đầu file script.js)
+// Khởi tạo Supabase
 const supabaseClient = supabase.createClient(
     'https://zjblnjxziswvmqktmyjj.supabase.co', 
     'sb_publishable_l_iTXPdQjExhFMZtElHjIA_uElx7hKq' 
 );
+
 const App = {
-state: {
+    state: {
         currentUser: null,
         allUsers: [],
         theme: localStorage.getItem('darkMode') === 'true' ? 'dark' : 'light',
@@ -23,13 +24,14 @@ state: {
         currentBoardView: null, 
         imageToSaveId: null, 
     },
+
     async init() { 
         try {
             this.autoSmartTheme(); 
             this.cacheDOM();
             this.bindEvents();
             
-            // THAY ĐỔI: Chờ tải xong data từ Supabase rồi mới vẽ
+            // Chờ tải xong data từ Supabase rồi mới vẽ
             await this.loadData(); 
             
             this.applyTheme();
@@ -38,26 +40,42 @@ state: {
             this.handleScrollEffect();
             this.setupInfiniteScroll();
 
-            setInterval(() => this.updateGreeting(), 10000);
-            setInterval(() => this.pollForUpdates(), 1500);
+            setInterval(() => this.updateGreeting(), 60000);
+            setInterval(() => this.pollForUpdates(), 10000); // Radar quét 10s/lần tránh lag server
             
+            // ĐỒNG BỘ TIN NHẮN REAL-TIME GIỮA CÁC TAB
+            window.addEventListener('storage', (e) => {
+                if (e.key === 'conversationsData') {
+                    this.state.conversations = JSON.parse(e.newValue || '[]');
+                    this.updateChatBadge();
+                    
+                    const msgPanel = document.getElementById('messagesPanel');
+                    if (msgPanel && msgPanel.classList.contains('active')) {
+                        if (typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
+                        if (typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
+                    }
+                }
+            });
+
         } catch (error) {
             console.error("Lỗi khởi tạo App:", error);
         }
-    },    autoSmartTheme() {
+    },    
+
+    autoSmartTheme() {
         const savedTheme = localStorage.getItem('darkMode');
         const hour = new Date().getHours();
         
-        // Trí thông minh: Nếu user chưa từng tự chọn Sáng/Tối
         if (savedTheme === null) {
-            if (hour >= 19 || hour < 6) { // Từ 19h tối đến 6h sáng hôm sau
+            if (hour >= 19 || hour < 6) { 
                 this.state.theme = 'dark';
             } else {
                 this.state.theme = 'light';
             }
         }
-    },   
-     cacheDOM() {
+    },    
+     
+    cacheDOM() {
         this.appEl = document.getElementById('app');
         this.authScreen = document.getElementById('authScreen');
         this.galleryGrid = document.getElementById('galleryGrid');
@@ -69,19 +87,16 @@ state: {
         this.mainWorkspace = document.getElementById('mainWorkspace');
         this.headerWrapper = document.getElementById('headerWrapper');
     },
-    // 1. Lưu tìm kiếm
+
     saveRecentSearch(query, imgUrl) {
         if (!query) return;
         let recent = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-        // Xóa nếu đã tồn tại để đẩy lên đầu
         recent = recent.filter(item => item.query !== query);
         recent.unshift({ query, imgUrl });
-        // Chỉ giữ 10 mục
         if (recent.length > 10) recent.pop();
         localStorage.setItem('recentSearches', JSON.stringify(recent));
     },
 
-    // 2. Render danh sách
     renderRecentSearches() {
         const list = document.getElementById('recentList');
         const dropdown = document.getElementById('recentSearchesDropdown');
@@ -108,14 +123,12 @@ state: {
         dropdown.classList.remove('hidden');
     },
 
-
     bindEvents() {
-
         // --- AUTH ---
         document.getElementById('toggleAuthMode')?.addEventListener('click', () => this.toggleAuthMode());
         document.getElementById('authForm')?.addEventListener('submit', (e) => this.handleAuth(e));
         document.getElementById('authForm')?.addEventListener('input', () => this.hideAuthMessage());
-        // Mắt hiện/ẩn mật khẩu
+        
         const togglePasswordBtn = document.getElementById('togglePassword');
         const passwordInput = document.getElementById('password');
         if (togglePasswordBtn && passwordInput) {
@@ -123,10 +136,10 @@ state: {
                 const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
                 passwordInput.setAttribute('type', type);
                 togglePasswordBtn.textContent = type === 'password' ? '👁️' : '🙈';
-                
             });
         }
-        // --- TÍNH NĂNG CUSTOM BACKGROUND BÊN SIDEBAR ---
+
+        // --- BACKGROUND ---
         const themeBtn = document.getElementById('themePaletteBtn');
         const themeDropdown = document.getElementById('themeDropdown');
         
@@ -142,27 +155,24 @@ state: {
         document.getElementById('bgUploadInput')?.addEventListener('change', (e) => this.handleBackgroundUpload(e));
         document.getElementById('removeBgBtn')?.addEventListener('click', () => this.removeCustomBackground());
         
-
-// --- NAVIGATION ---
+        // --- NAVIGATION ---
         document.getElementById('navHome')?.addEventListener('click', () => location.reload());
         
-        // Xử lý nút mở thông báo: Mở bảng -> Render dữ liệu -> Đánh dấu đã đọc (Reset về 0)
         document.getElementById('openNotificationsBtn')?.addEventListener('click', () => {
             const notiModal = document.getElementById('notificationsModal');
-            if (notiModal) {
-                notiModal.classList.remove('hidden');
-            }
+            if (notiModal) notiModal.classList.remove('hidden');
             this.renderNotifications(); 
-            this.markNotificationsAsRead(); // Lệnh này sẽ quét sạch cục đỏ
+            this.markNotificationsAsRead(); 
         });
-        // --- Xử lý click mở Trang Cá Nhân (Profile) ---
+
         document.getElementById('openProfileBtn')?.addEventListener('click', () => {
             this.galleryGrid.classList.add('hidden');
-            document.getElementById('headerWrapper').classList.add('hidden'); // Ẩn lưới ảnh & bộ lọc
-            this.profilePage.classList.remove('hidden'); // Hiện trang cá nhân
-            this.switchProfileTab('created'); // Mặc định mở tab "Đã tạo"
+            document.getElementById('headerWrapper').classList.add('hidden'); 
+            this.profilePage.classList.remove('hidden'); 
+            this.switchProfileTab('created'); 
         });
-            document.getElementById('closeProfileBtn')?.addEventListener('click', () => {
+
+        document.getElementById('closeProfileBtn')?.addEventListener('click', () => {
             this.profilePage.classList.add('hidden');
             this.galleryGrid.classList.remove('hidden');
             document.getElementById('headerWrapper').classList.remove('hidden');
@@ -173,7 +183,7 @@ state: {
             location.reload();
         });
 
-        // --- MODALS (Upload & Detail) ---
+        // --- MODALS ---
         document.getElementById('openCreateModalBtn')?.addEventListener('click', () => this.uploadModal.classList.remove('hidden'));
         document.getElementById('closeUploadModalBtn')?.addEventListener('click', () => this.uploadModal.classList.add('hidden'));
         document.getElementById('cancelUploadBtn')?.addEventListener('click', () => this.uploadModal.classList.add('hidden'));
@@ -181,7 +191,7 @@ state: {
         document.getElementById('closeDetailModalBtn')?.addEventListener('click', () => {
             this.detailModal.classList.add('hidden');
             document.getElementById('detailImg').classList.remove('is-zoomed');
-            document.getElementById('pinOptionsDropdown').classList.add('hidden'); // Đóng menu
+            document.getElementById('pinOptionsDropdown').classList.add('hidden'); 
         });
 
         window.addEventListener('keydown', (e) => {
@@ -197,7 +207,6 @@ state: {
             if (e.target === this.detailModal) this.detailModal.classList.add('hidden');
             if (e.target === this.notiModal) this.notiModal.classList.add('hidden');
             
-            // Đóng menu options nếu click ra ngoài
             const menu = document.getElementById('pinOptionsDropdown');
             const btn = document.getElementById('moreOptionsBtn');
             if (menu && !menu.classList.contains('hidden') && e.target !== btn && !btn.contains(e.target)) {
@@ -205,13 +214,12 @@ state: {
             }
         });
 
-// --- LỌC TAGS (Trang chủ & Upload) ---
+        // --- LỌC TAGS ---
         document.querySelectorAll('.tag-pill').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget;
                 const container = target.closest('.tags-container');
                 
-                // Tắt active các nút cùng nhóm
                 container.querySelectorAll('.tag-pill').forEach(b => {
                     b.classList.remove('active', 'solid-tag');
                     if (container.id === 'uploadCategoryTags') b.classList.add('outline-tag');
@@ -223,25 +231,22 @@ state: {
                     target.classList.remove('outline-tag');
                 }
 
-                // Nếu là bộ lọc trang chủ
                 if (container.id === 'categoryTags') {
                     this.state.currentTag = target.dataset.filter;
-                    this.renderGallery(true); // BẮT BUỘC CÓ CHỮ 'true' Ở ĐÂY ĐỂ RESET ẢNH
+                    this.renderGallery(true); 
                 }
             });
         });
 
-        // Tìm kiếm
-// --- LOGIC TÌM KIẾM MỚI (CHỈ HIỆN KHI GÕ, ẤN ENTER MỚI LƯU) ---
+        // --- TÌM KIẾM ---
         const searchInput = document.getElementById('searchInput');
         const searchDropdown = document.getElementById('searchDropdown');
         const dropdownContent = document.getElementById('dropdownContent');
 
-        // Hàm render nội dung dropdown an toàn (ép kiểu string)
         const renderDropdown = (type, list) => {
             dropdownContent.innerHTML = `<div class="dropdown-header">${type === 'recent' ? 'Tìm kiếm gần đây' : 'Gợi ý tìm kiếm'}</div>`;
             list.forEach(item => {
-                const text = typeof item === 'object' ? item.query : item; // Fix lỗi [object Object]
+                const text = typeof item === 'object' ? item.query : item;
                 const div = document.createElement('div');
                 div.className = 'dropdown-item';
                 div.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> <span>${text}</span>`;
@@ -256,7 +261,6 @@ state: {
             searchDropdown.classList.remove('hidden');
         };
 
-        // 1. Khi đang gõ: Hiện gợi ý dựa trên từ khóa (Không hiện tự động khi trống)
         searchInput.addEventListener('input', (e) => {
             const val = e.target.value.trim().toLowerCase();
             if (!val) { 
@@ -264,7 +268,6 @@ state: {
                 return; 
             }
             
-            // Lấy từ khóa gợi ý từ tiêu đề ảnh
             const suggestions = [...new Set(this.state.images
                 .filter(img => img.title.toLowerCase().includes(val))
                 .map(img => img.title))].slice(0, 5);
@@ -273,13 +276,11 @@ state: {
             else searchDropdown.classList.add('hidden');
         });
 
-        // 2. Khi ấn Enter: Lưu lịch sử tìm kiếm vào localStorage
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const query = e.target.value.trim();
                 if (query) {
                     let recents = JSON.parse(localStorage.getItem('recentSearches') || '[]');
-                    // Chỉ lưu nếu chưa tồn tại, đẩy lên đầu
                     recents = [query, ...recents.filter(i => i !== query)].slice(0, 5);
                     localStorage.setItem('recentSearches', JSON.stringify(recents));
                     
@@ -290,17 +291,16 @@ state: {
             }
         });
 
-        // 3. Khi Focus: Hiện lịch sử gần đây
         searchInput.addEventListener('focus', () => {
             const recents = JSON.parse(localStorage.getItem('recentSearches') || '[]');
             if (recents.length > 0 && !searchInput.value) renderDropdown('recent', recents);
         });
 
-        // Đóng khi click ra ngoài
         window.addEventListener('click', (e) => {
             if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.add('hidden');
         });
-        // --- XỬ LÝ UPLOAD ẢNH (QUA MINI PHOTOSHOP ĐỂ VẼ/CẮT) ---
+
+        // --- PHOTOSHOP MINI ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -308,7 +308,7 @@ state: {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        this.openImageEditor(ev.target.result); // Mở bảng Mini Photoshop
+                        this.openImageEditor(ev.target.result); 
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
@@ -316,7 +316,6 @@ state: {
             });
         }
 
-// --- CÁC SỰ KIỆN CỦA MINI PHOTOSHOP ---
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
@@ -334,13 +333,12 @@ state: {
         const colorPalette = document.getElementById('colorPalette');
         const brushColor = document.getElementById('brushColor');
         
-        // Sự kiện Cắt Tự Do
         freeCropBtn?.addEventListener('click', () => {
             this.state.isCropModeActive = !this.state.isCropModeActive;
             if (this.state.isCropModeActive) {
                 freeCropBtn.className = 'btn-primary notranslate';
                 freeCropBtn.textContent = '✂️ Kéo chuột để cắt...';
-                this.state.isDrawModeActive = false; // Tắt vẽ
+                this.state.isDrawModeActive = false; 
                 drawBtn.className = 'btn-outline notranslate';
                 drawBtn.textContent = '🖌️ Bật Vẽ';
                 colorPalette.classList.add('hidden');
@@ -352,14 +350,13 @@ state: {
             }
         });
 
-        // Sự kiện Bật Vẽ
         drawBtn?.addEventListener('click', () => {
             this.state.isDrawModeActive = !this.state.isDrawModeActive;
             if (this.state.isDrawModeActive) {
                 drawBtn.className = 'btn-primary notranslate';
                 drawBtn.textContent = '🖌️ Đang Vẽ';
                 colorPalette.classList.remove('hidden');
-                this.state.isCropModeActive = false; // Tắt cắt
+                this.state.isCropModeActive = false; 
                 freeCropBtn.className = 'btn-outline notranslate';
                 freeCropBtn.textContent = '✂️ Cắt Tự Do';
                 document.getElementById('imageCanvas').style.cursor = 'crosshair';
@@ -371,7 +368,6 @@ state: {
             }
         });
 
-        // Đổi màu cọ vẽ
         document.querySelectorAll('.color-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 brushColor.value = e.target.dataset.color;
@@ -380,7 +376,6 @@ state: {
             });
         });
 
-        // Bắt sự kiện thao tác trên Canvas (Vẽ hoặc Cắt)
         const canvas = document.getElementById('imageCanvas');
         if(canvas) {
             canvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
@@ -390,7 +385,7 @@ state: {
         }
         
         // ===================================================================
-        // HỆ THỐNG NHẮN TIN THỰC SỰ (REAL-TIME LOCALSTORAGE CHAT)
+        // HỆ THỐNG NHẮN TIN 
         // ===================================================================
         const messagesPanel = document.getElementById('messagesPanel');
         const chatListView = document.getElementById('chatListView');
@@ -398,13 +393,11 @@ state: {
         const chatDetailView = document.getElementById('chatDetailView');
         const openChatBtn = document.getElementById('openChatBtn');
         
-        // 1. Tải bộ nhớ tin nhắn
         if (!App.state.conversations) {
             App.state.conversations = JSON.parse(localStorage.getItem('conversationsData') || '[]');
         }
         const saveConversations = () => localStorage.setItem('conversationsData', JSON.stringify(App.state.conversations));
 
-// 2. Render Danh sách Chat động
         const renderChatList = () => {
             const listEl = document.getElementById('dynamicChatList');
             if (!listEl) return;
@@ -424,7 +417,6 @@ state: {
                 const otherUser = App.getUserFromEmail(otherEmail) || { name: otherEmail.split('@')[0], avatar: null };
                 const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1].text : 'Bắt đầu trò chuyện...';
                 
-                // KIỂM TRA XEM TIN NHẮN ĐÃ ĐƯỢC ĐỌC CHƯA
                 const isUnread = chat.unreadFor && chat.unreadFor.includes(myEmail);
                 
                 const item = document.createElement('div');
@@ -444,9 +436,8 @@ state: {
                 listEl.appendChild(item);
             });
         };
-        this.renderChatListGlobal = renderChatList; // Expose để radar gọi
+        this.renderChatListGlobal = renderChatList; 
 
-        // 3. Mở phòng chat chi tiết
         const openChatRoom = (chatId, otherUser, otherEmail) => {
             App.state.activeChatId = chatId;
             document.getElementById('chatRecipientName').textContent = otherUser.name;
@@ -464,7 +455,7 @@ state: {
             if (chat && chat.unreadFor && chat.unreadFor.includes(App.state.currentUser.email)) {
                 chat.unreadFor = chat.unreadFor.filter(e => e !== App.state.currentUser.email);
                 saveConversations();
-                if(typeof this.updateChatBadge === 'function') this.updateChatBadge();
+                App.updateChatBadge();
             }
 
             renderMessages();
@@ -472,7 +463,6 @@ state: {
             chatDetailView.classList.remove('hidden');
         };
 
-        // 4. Render bong bóng tin nhắn
         const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
@@ -486,27 +476,22 @@ state: {
                 bubble.textContent = msg.text;
                 area.appendChild(bubble);
             });
-            area.scrollTop = area.scrollHeight; // Cuộn xuống tin nhắn mới nhất
+            area.scrollTop = area.scrollHeight; 
         };
-        this.renderMessagesGlobal = renderMessages; // Expose để radar gọi
-// 5. Giao diện Tạo tin nhắn mới & Tìm kiếm (Đã nâng cấp)
+        this.renderMessagesGlobal = renderMessages; 
+
         const newMessageView = document.getElementById('newMessageView');
         let selectedUserForChat = null;
 
-        // Bấm nút Tin nhắn mới ở danh sách chat
         document.getElementById('newMessageBtn')?.addEventListener('click', () => {
             if (!App.state.currentUser) return;
-            
-            // Ẩn danh sách chat, hiện giao diện tìm kiếm
             document.getElementById('chatListView').classList.add('hidden');
             if(newMessageView) newMessageView.classList.remove('hidden');
             
-            // Reset dữ liệu tìm kiếm
             const searchInput = document.getElementById('searchUserInput');
             if(searchInput) searchInput.value = '';
             selectedUserForChat = null;
             
-            // Khóa nút Tiếp theo (chỉ mở khi chọn người)
             const nextBtn = document.getElementById('nextNewMessageBtn');
             if (nextBtn) {
                 nextBtn.style.background = 'var(--bg-hover)';
@@ -516,13 +501,11 @@ state: {
             renderSuggestedUsers(''); 
         });
 
-        // Nút mũi tên quay lại từ màn hình tạo mới
         document.getElementById('backFromNewMessageBtn')?.addEventListener('click', () => {
             if(newMessageView) newMessageView.classList.add('hidden');
             document.getElementById('chatListView').classList.remove('hidden');
         });
 
-        // Hàm lọc và hiển thị danh sách người dùng được đề xuất
         const renderSuggestedUsers = (searchQuery = '') => {
             const listEl = document.getElementById('suggestedUsersList');
             if (!listEl) return;
@@ -530,7 +513,7 @@ state: {
             
             const users = App.state.allUsers || [];
             const myEmail = App.state.currentUser.email;            
-            // Lọc tài khoản (Bỏ qua chính mình & khớp từ khóa)
+            
             const filteredUsers = users.filter(u => 
                 u.email !== myEmail && 
                 (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -558,13 +541,11 @@ state: {
                     </div>
                 `;
 
-                // Xử lý khi click chọn 1 người dùng
                 item.onclick = () => {
                     document.querySelectorAll('.user-suggestion-item').forEach(el => el.style.background = 'transparent');
                     item.style.background = 'var(--bg-hover)';
                     selectedUserForChat = user;
                     
-                    // Mở khóa nút Tiếp theo
                     const nextBtn = document.getElementById('nextNewMessageBtn');
                     if (nextBtn) {
                         nextBtn.style.background = 'var(--danger-color)';
@@ -576,12 +557,10 @@ state: {
             });
         };
 
-        // Gõ phím tìm kiếm realtime
         document.getElementById('searchUserInput')?.addEventListener('input', (e) => {
             renderSuggestedUsers(e.target.value.trim());
         });
 
-        // Bấm "Tiếp theo" để tạo phòng chat
         document.getElementById('nextNewMessageBtn')?.addEventListener('click', () => {
             if (!selectedUserForChat) return;
             
@@ -595,9 +574,7 @@ state: {
             if(newMessageView) newMessageView.classList.add('hidden');
             openChatRoom(chat.id, selectedUserForChat, selectedUserForChat.email);
         });
-// --- 6. HỆ THỐNG GỬI EMOJI & TIN NHẮN ---
-        
-        // A. Xử lý bảng Emoji
+
         const chatEmojiBtn = document.getElementById('chatEmojiBtn');
         const chatEmojiPicker = document.getElementById('chatEmojiPicker');
         if (chatEmojiBtn && chatEmojiPicker) {
@@ -620,7 +597,7 @@ state: {
             });
         }
 
-        // B. Lõi Gửi Tin Nhắn (Text + Emoji)
+        // B. Lõi Gửi Tin Nhắn (ĐÃ FIX LỖI THÔNG BÁO)
         const sendMessage = () => {
             const input = document.getElementById('chatMessageInput');
             const text = input.value.trim();
@@ -630,11 +607,14 @@ state: {
             const chatIdx = chats.findIndex(c => c.id === App.state.activeChatId);
             
             if (chatIdx > -1) {
+                const myEmail = App.state.currentUser.email;
+                const targetEmail = chats[chatIdx].participants.find(p => p !== myEmail);
+
                 // Đẩy tin nhắn vào mảng
-                chats[chatIdx].messages.push({ sender: App.state.currentUser.email, text: text, time: Date.now() });
+                chats[chatIdx].messages.push({ sender: myEmail, text: text, time: Date.now() });
                 
-                // Kích hoạt Radar chấm đỏ
-                chats[chatIdx].unreadFor = chats[chatIdx].participants.filter(p => p !== App.state.currentUser.email);
+                // Đánh dấu đỏ cho người nhận
+                chats[chatIdx].unreadFor = [targetEmail];
                 
                 localStorage.setItem('conversationsData', JSON.stringify(chats));
                 App.state.conversations = chats; 
@@ -642,17 +622,20 @@ state: {
                 if (typeof renderMessages === 'function') renderMessages();
                 if (typeof renderChatList === 'function') renderChatList();
                 
-                input.value = ''; // Reset ô nhập
+                input.value = ''; 
+
+                // GỬI CHUÔNG THÔNG BÁO TỚI SUPABASE CHO ĐỐI PHƯƠNG
+                if (targetEmail) {
+                    App.pushNotification(targetEmail, `💬 ${App.state.currentUser.name} vừa gửi cho bạn một tin nhắn.`);
+                }
             }
         };
 
-        // C. Kích hoạt dây điện nút bấm
         document.getElementById('sendChatMessageBtn')?.addEventListener('click', sendMessage);
         document.getElementById('chatMessageInput')?.addEventListener('keypress', (e) => { 
             if (e.key === 'Enter') sendMessage(); 
         });
         
-                    // 7. Các nút Điều hướng Panel Tin Nhắn (ĐÃ FIX XUNG ĐỘT VỚI AI)
         if (openChatBtn) {
             openChatBtn.onclick = function(e) {
                 e.preventDefault();
@@ -661,17 +644,14 @@ state: {
                 const msgPanel = document.getElementById('messagesPanel');
                 const aiPanel = document.getElementById('aiPanel');
 
-                // Đóng bảng AI nếu nó đang mở để tránh đè nhau
                 if (aiPanel) aiPanel.classList.remove('active');
 
-                // Chỉ mở duy nhất bảng Tin nhắn
                 if (msgPanel) {
                     msgPanel.classList.toggle('active');
                     msgPanel.classList.remove('hidden');
                     
                     if (typeof renderChatList === 'function') renderChatList(); 
                     
-                    // Reset các view về mặc định (Hiện danh sách chat)
                     document.querySelectorAll('#chatListView').forEach(v => v.classList.remove('hidden'));
                     document.querySelectorAll('#inviteView').forEach(v => v.classList.add('hidden'));
                     document.querySelectorAll('#chatDetailView').forEach(v => v.classList.add('hidden'));
@@ -689,7 +669,6 @@ state: {
         document.getElementById('backToChatListBtn')?.addEventListener('click', () => { inviteView.classList.add('hidden'); chatListView.classList.remove('hidden'); });
         document.getElementById('backFromChatDetailBtn')?.addEventListener('click', () => { chatDetailView.classList.add('hidden'); chatListView.classList.remove('hidden'); App.state.activeChatId = null; });
 
-        // 8. Sao chép liên kết cá nhân
         document.getElementById('copyProfileLinkBtn')?.addEventListener('click', () => {
             if (!App.state.currentUser) return;
             const profileLink = `${window.location.origin}/profile?user=${encodeURIComponent(App.state.currentUser.email)}`;
@@ -698,7 +677,6 @@ state: {
             }).catch(() => prompt("Chép thủ công tại đây:", profileLink));
         });
 
-        // Click ra ngoài thì tự động đóng Panel Tin nhắn
         window.addEventListener('click', (e) => {
             const msgPanel = document.getElementById('messagesPanel');
             if (msgPanel && msgPanel.classList.contains('active')) {
@@ -707,19 +685,18 @@ state: {
                 }
             }
         });
+
         document.getElementById('submitUploadBtn')?.addEventListener('click', () => this.saveNewIdea());
 
         // --- CHI TIẾT ẢNH TƯƠNG TÁC ---
         document.getElementById('likeBtn')?.addEventListener('click', () => this.toggleLikeDetail());
         document.getElementById('savePinBtn')?.addEventListener('click', () => this.toggleSaveDetail());
         
-        // Gửi Comment tổng
         document.getElementById('sendCommentBtn')?.addEventListener('click', () => this.addComment());
         document.getElementById('mainCommentInput')?.addEventListener('keypress', (e) => {
             if(e.key === 'Enter') this.addComment();
         });
 
-        // Emoji Picker
         const emojiBtn = document.getElementById('emojiBtn');
         const emojiPicker = document.getElementById('emojiPicker');
         if (emojiBtn && emojiPicker) {
@@ -734,8 +711,6 @@ state: {
             });
         }
 
-        // Phóng to / Tải ảnh
-        // Nút kích hoạt AI Tìm kiếm (Kính lúp)
         document.getElementById('aiSearchBtn')?.addEventListener('click', () => this.performAISearch());
         document.getElementById('expandImgBtn')?.addEventListener('click', () => document.getElementById('detailImg').classList.toggle('is-zoomed'));
         document.getElementById('detailImg')?.addEventListener('click', () => document.getElementById('detailImg').classList.toggle('is-zoomed'));
@@ -746,16 +721,13 @@ state: {
             a.click();
         });
 
-// Nút Theo dõi (Follow) - Kích hoạt hệ thống thật
         document.getElementById('followBtn')?.addEventListener('click', () => this.toggleFollow());
-        // Menu Tác Giả (Sửa / Xóa)
         document.getElementById('moreOptionsBtn')?.addEventListener('click', () => {
             document.getElementById('pinOptionsDropdown').classList.toggle('hidden');
         });
         document.getElementById('deletePinBtn')?.addEventListener('click', () => this.deleteIdea());
         document.getElementById('editPinBtn')?.addEventListener('click', () => this.editIdea());
 
-        // --- GIAO DIỆN & CÀI ĐẶT ---
         document.getElementById('themeToggleBtn')?.addEventListener('click', () => {
             this.state.theme = this.state.theme === 'light' ? 'dark' : 'light';
             localStorage.setItem('darkMode', this.state.theme === 'dark');
@@ -768,23 +740,18 @@ state: {
             });
         });
         
-        // Thay Avatar
         document.getElementById('settingAvatarInput')?.addEventListener('change', (e) => this.handleAvatarUpload(e));
         document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.saveSettings());
         
-        // Khởi tạo AI Global
         this.setupGlobalAi();
     },
     
-
-async loadData() {
-        // Tải toàn bộ ảnh
+    async loadData() {
         const { data: postsData, error: postsError } = await supabaseClient
             .from('posts')
             .select('*')
             .order('id', { ascending: false });
 
-        // Tải danh sách User (để lấy Tên thật và Avatar)
         const { data: usersData, error: usersError } = await supabaseClient
             .from('users')
             .select('email, name, avatar');
@@ -793,17 +760,15 @@ async loadData() {
             console.error("Lỗi tải dữ liệu:", postsError || usersError);
         } else {
             this.state.images = postsData || [];
-            this.state.allUsers = usersData || []; // Lưu danh sách user vào state
+            this.state.allUsers = usersData || []; 
             this.renderGallery(true);
         }
     },
-        saveImages() {
+
+    saveImages() {
         localStorage.setItem('imagesData', JSON.stringify(this.state.images));
     },
 
-    // =========================================================
-    // THUẬT TOÁN NÉN ẢNH (CANVAS COMPRESSION)
-    // =========================================================
     compressImage(file, maxWidth, quality) {
         return new Promise((resolve) => {
             const reader = new FileReader();
@@ -816,7 +781,6 @@ async loadData() {
                     let width = img.width;
                     let height = img.height;
 
-                    // Tính toán tỷ lệ thu nhỏ nếu ảnh gốc lớn hơn mức cho phép
                     if (width > maxWidth) {
                         height = Math.round((height * maxWidth) / width);
                         width = maxWidth;
@@ -827,7 +791,6 @@ async loadData() {
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Tuyệt chiêu: Xuất ra định dạng WEBP siêu nhẹ thay vì PNG/JPEG
                     const compressedBase64 = canvas.toDataURL('image/webp', quality);
                     resolve(compressedBase64);
                 };
@@ -835,8 +798,6 @@ async loadData() {
         });
     },
 
-    // --- LÕI XỬ LÝ BACKGROUND ---
-// --- LÕI XỬ LÝ BACKGROUND ---
     handleBackgroundUpload(e) {
         const file = e.target.files[0];
         if (!file) return;
@@ -845,9 +806,8 @@ async loadData() {
             if (!this.state.currentUser) return;
             const userEmail = this.state.currentUser.email;
 
-            // FIX: Lưu trực tiếp ảnh nền vào bộ nhớ trình duyệt, gắn với tên Email
             localStorage.setItem(`bg_${userEmail}`, base64Data);
-            this.state.currentUser.customBackground = base64Data; // Cập nhật state tạm
+            this.state.currentUser.customBackground = base64Data; 
 
             this.applyCustomBackground();
             
@@ -860,7 +820,6 @@ async loadData() {
         if (!this.state.currentUser) return;
         const userEmail = this.state.currentUser.email;
         
-        // FIX: Ưu tiên lấy ảnh nền từ bộ nhớ theo Email
         const bgData = localStorage.getItem(`bg_${userEmail}`) || this.state.currentUser.customBackground;
         let bgEl = document.getElementById('customBackground');
         
@@ -868,7 +827,7 @@ async loadData() {
             bgEl = document.createElement('div');
             bgEl.id = 'customBackground';
             bgEl.className = 'custom-bg hidden';
-            document.body.prepend(bgEl); // Nhét vào sau thẻ body
+            document.body.prepend(bgEl); 
         }
 
         if (bgData) {
@@ -886,7 +845,6 @@ async loadData() {
         if (!this.state.currentUser) return;
         const userEmail = this.state.currentUser.email;
 
-        // FIX: Xóa ảnh nền của đúng email đó khỏi bộ nhớ
         localStorage.removeItem(`bg_${userEmail}`);
         this.state.currentUser.customBackground = null;
             
@@ -897,6 +855,7 @@ async loadData() {
         const dropdown = document.getElementById('themeDropdown');
         if (dropdown) dropdown.classList.add('hidden');
     },
+
     applyTheme() {
         const isDark = this.state.theme === 'dark';
         document.body.classList.toggle('dark-mode', isDark);
@@ -907,7 +866,6 @@ async loadData() {
         if (moon) moon.classList.toggle('hidden', !isDark);
     },
 
-    // Xử lý đổ bóng cho thanh Header khi cuộn
     handleScrollEffect() {
         if (this.mainWorkspace && this.headerWrapper) {
             this.mainWorkspace.addEventListener('scroll', () => {
@@ -920,11 +878,9 @@ async loadData() {
         }
     },
 
-// --- AUTH LOGIC ---
     async checkAuth() { 
         const userEmail = localStorage.getItem('currentUser');
         if (userEmail) {
-            // Tải thông tin người dùng từ Supabase thay vì đứng im chờ đợi
             const { data: user, error } = await supabaseClient
                 .from('users')
                 .select('*')
@@ -932,9 +888,8 @@ async loadData() {
                 .single();
 
             if (user) {
-                this.state.currentUser = user; // Lưu thông tin người dùng vào bộ nhớ
+                this.state.currentUser = user; 
 
-                // Đảm bảo không bị lỗi thiếu dữ liệu mảng
                 if (!this.state.currentUser.boards) this.state.currentUser.boards = [];
                 if (!this.state.currentUser.followers) this.state.currentUser.followers = [];
                 if (!this.state.currentUser.following) this.state.currentUser.following = [];
@@ -944,7 +899,7 @@ async loadData() {
                 this.authScreen.classList.add('hidden');
                 this.appEl.classList.remove('hidden');
                 this.updateUIWithUser();
-                this.renderGallery(true); // Đã có thông tin user, bây giờ mới bắt đầu vẽ ảnh!
+                this.renderGallery(true); 
                 this.applyCustomBackground(); 
                 
                 this.updateNotiBadge();
@@ -953,13 +908,13 @@ async loadData() {
             }
         }
         
-        // Nếu chưa đăng nhập, hoặc tải lỗi thì hiện màn hình Đăng nhập
         this.appEl.classList.add('hidden');
         this.authScreen.classList.remove('hidden');
         this.state.currentUser = null;
         this.applyCustomBackground(); 
     },
-            hideAuthMessage() {
+
+    hideAuthMessage() {
         const msgEl = document.getElementById('authMessage');
         if (msgEl) msgEl.classList.add('hidden');
     },
@@ -988,7 +943,6 @@ async loadData() {
         }
 
         if (isLogin) {
-            // Đăng nhập với Supabase
             const { data, error } = await supabaseClient
                 .from('users')
                 .select('*')
@@ -1004,7 +958,6 @@ async loadData() {
                 msgEl.classList.remove('hidden');
             }
         } else {
-            // Đăng ký với Supabase
             const { error } = await supabaseClient
                 .from('users')
                 .insert([{ email, password, name: name || email.split('@')[0], boards: [] }]);
@@ -1018,7 +971,7 @@ async loadData() {
             }
         }
     },
-    // Hiển thị Avatar (Dùng ảnh nếu có, không có lấy chữ cái đầu)
+
     renderAvatar(user, elId) {
         const el = document.getElementById(elId);
         if(!el || !user) return;
@@ -1043,7 +996,6 @@ async loadData() {
         document.getElementById('profileEmail').textContent = this.state.currentUser.email;
         this.renderAvatar(this.state.currentUser, 'profileAvatar');
 
-        // FIX LỖI: Tính toán và hiển thị chính xác số người theo dõi
         const followersCount = (this.state.currentUser.followers || []).length;
         const followingCount = (this.state.currentUser.following || []).length;
         const emailEl = document.getElementById('profileEmail');
@@ -1053,6 +1005,7 @@ async loadData() {
 
         this.updateGreeting();
     },
+
     updateGreeting() {
         const greetingEl = document.getElementById('greetingText');
         if (!greetingEl) return;
@@ -1064,7 +1017,6 @@ async loadData() {
         let safeName = `<span class="notranslate">${userName}</span>`;
         let greetingMsg = "KHÁM PHÁ Ý TƯỞNG ✨";
         
-        // Dùng &nbsp; để ép buộc giữ khoảng trắng cứng, không bị Google nuốt mất
         if (hour >= 5 && hour < 11) {
             greetingMsg = `CHÀO BUỔI SÁNG,&nbsp;${safeName}&nbsp; CÙNG TÌM Ý TƯỞNG NHÉ ☕`;
         } else if (hour >= 11 && hour < 14) {
@@ -1079,16 +1031,14 @@ async loadData() {
         
         greetingEl.innerHTML = greetingMsg;
     },
+
     getUserFromEmail(email) {
-        // TÌM TRÊN SUPABASE: Lấy tên và avatar chuẩn từ mảng allUsers vừa tải
         if (!this.state.allUsers) return null;
         return this.state.allUsers.find(u => u.email === email) || null;
     },
-// --- MAIN GALLERY ---
+
     renderGallery(reset = false) {
         if (!this.galleryGrid) return;
-        
-        // BẢO VỆ: Nếu chưa đăng nhập thì tuyệt đối không được xử lý ảnh để tránh lỗi
         if (!this.state.currentUser) return; 
 
         if (reset) {
@@ -1097,7 +1047,6 @@ async loadData() {
             this.state.hasMore = true;
         }
 
-        // TÍNH NĂNG CUỘN VÔ TẬN VÀ PHÂN TRANG
         if (!this.state.hasMore || this.state.isLoadingMore) return;
         this.state.isLoadingMore = true;
 
@@ -1117,7 +1066,6 @@ async loadData() {
             return;
         }
 
-        // TẠO SKELETON FAKE LOAD (Hiệu ứng khung xương lúc tải)
         const skeletonIds = [];
         const loadCount = paginatedItems.length > 0 ? paginatedItems.length : 15;
         
@@ -1134,19 +1082,14 @@ async loadData() {
             }
         }
 
-        // Delay 800ms tạo cảm giác lấy dữ liệu
         setTimeout(() => {
-            // Xóa skeleton
             skeletonIds.forEach(id => document.getElementById(id)?.remove());
 
-            // Vẽ ảnh thật
             paginatedItems.forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card shadow-large';
                 
-                // KIỂM TRA ĐÃ LƯU: Hỗ trợ cả 2 chuẩn dữ liệu boards và savedIds
                 const isSaved = (this.state.currentUser.boards || []).some(b => b.ids.includes(item.id)) || (this.state.currentUser.savedIds || []).includes(item.id);
-                
                 const authorUser = this.getUserFromEmail(item.owner);
                 const authorName = authorUser ? authorUser.name : item.owner.split('@')[0];
 
@@ -1176,11 +1119,10 @@ async loadData() {
             if (end >= filtered.length) this.state.hasMore = false;
         }, 800);
     },
-// --- UPLOAD & ĐĂNG BÀI ---
+
     async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
         
-        // BẢO VỆ: Ngăn chặn click đúp (khóa nút nếu đang xử lý)
         if (submitBtn && submitBtn.disabled) return; 
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -1213,27 +1155,19 @@ async loadData() {
             comments: []
         };
 
-        // Đẩy lên Supabase
-        const { error } = await supabaseClient
-            .from('posts')
-            .insert([newPost]);
+        const { error } = await supabaseClient.from('posts').insert([newPost]);
 
         if (error) {
             console.error("Lỗi đăng bài:", error);
             alert("Có lỗi xảy ra khi đăng bài!");
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Đăng ý tưởng';
-            }
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
             return;
         }
 
-        // Thành công: Cập nhật lưới ảnh
         this.state.images.unshift(newPost);
         this.uploadModal.classList.add('hidden');
         this.renderGallery(true); 
         
-        // Reset form và mở khóa nút
         document.getElementById('uploadTitle').value = '';
         document.getElementById('uploadDesc').value = '';
         imgEl.src = '';
@@ -1246,10 +1180,9 @@ async loadData() {
         }
     },
     
-    // --- MODAL CHI TIẾT ---
     openDetailModal(item) {
         this.state.activeImageId = item.id;
-        this.state.replyingToId = null; // Reset trạng thái reply
+        this.state.replyingToId = null; 
         
         document.getElementById('detailImg').src = item.url;
         document.getElementById('detailTitle').textContent = item.title;
@@ -1264,7 +1197,6 @@ async loadData() {
         document.getElementById('detailAuthorName').textContent = authorUser ? authorUser.name : item.owner.split('@')[0];
         this.renderAvatar(authorUser, 'detailAuthorAvatar');
         
-        // Hiện nút Sửa/Xóa nếu là Tác Giả
         const isOwner = item.owner === this.state.currentUser.email;
         const moreBtn = document.getElementById('moreOptionsBtn');
         if (moreBtn) {
@@ -1279,14 +1211,12 @@ async loadData() {
         saveBtn.textContent = isSaved ? 'Đã lưu' : 'Lưu';
         saveBtn.style.backgroundColor = isSaved ? 'var(--text-secondary)' : 'var(--accent-color)';
         
-        // Nút theo dõi 
         const followBtn = document.getElementById('followBtn');
         if(followBtn) {
             if (isOwner) {
-                followBtn.classList.add('hidden'); // Không tự theo dõi mình
+                followBtn.classList.add('hidden'); 
             } else {
                 followBtn.classList.remove('hidden');
-                // Kiểm tra xem đã theo dõi người này chưa
                 const isFollowing = (this.state.currentUser.following || []).includes(item.owner);
                 if (isFollowing) {
                     followBtn.textContent = 'Đang theo dõi';
@@ -1297,7 +1227,7 @@ async loadData() {
                 }
             }
         }
-        document.getElementById('mainCommentInput').value = ''; // Xóa ô nhập cũ
+        document.getElementById('mainCommentInput').value = ''; 
         document.getElementById('mainCommentInput').placeholder = "Thêm bình luận...";
         document.getElementById('aiSimilarSection')?.classList.add('hidden');
 
@@ -1305,49 +1235,35 @@ async loadData() {
         this.detailModal.classList.remove('hidden');
     },
 
-    // --- XÓA & SỬA BÀI VIẾT ---
     async deleteIdea() {
         if(confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) {
-            // Xóa trên Supabase
-            const { error } = await supabaseClient
-                .from('posts')
-                .delete()
-                .eq('id', this.state.activeImageId);
+            const { error } = await supabaseClient.from('posts').delete().eq('id', this.state.activeImageId);
+            if (error) { alert("Lỗi xóa bài viết!"); return; }
 
-            if (error) {
-                alert("Lỗi xóa bài viết!");
-                return;
-            }
-
-            // Xóa trong state và vẽ lại
             this.state.images = this.state.images.filter(img => img.id !== this.state.activeImageId);
             this.renderGallery(true);
             this.detailModal.classList.add('hidden');
         }
     },
-        editIdea() {
+
+    editIdea() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
         if(!img) return;
         const newTitle = prompt("Nhập tiêu đề mới:", img.title);
         if(newTitle !== null && newTitle.trim() !== '') {
-            // Cập nhật dữ liệu
             img.title = newTitle;
             document.getElementById('detailTitle').textContent = newTitle;
             this.saveImages();
             
-            // 1. Ép Trang chủ xóa sạch lưới cũ và vẽ lại bằng tiêu đề mới (thêm 'true')
             this.renderGallery(true);
-            
-            // 2. Cập nhật luôn cho Trang cá nhân (nếu đang mở)
             if (!this.profilePage.classList.contains('hidden')) {
                 this.renderProfileData('created');
                 this.renderProfileData('saved'); 
             }
         }
-        // Đóng menu lựa chọn
         document.getElementById('pinOptionsDropdown').classList.add('hidden');
     },
-    // --- LƯU (SAVE) & THẢ TIM (LIKE) ---
+
     async toggleSave(id, btnEl, event) {
         if (event) event.stopPropagation();
         if (!this.state.currentUser) return;
@@ -1370,7 +1286,6 @@ async loadData() {
         }
         
         this.state.currentUser.savedIds = savedList;
-        // Bắn lên Supabase
         await supabaseClient.from('users').update({ savedIds: savedList }).eq('email', this.state.currentUser.email);
     },
     
@@ -1401,16 +1316,12 @@ async loadData() {
         
         img.likedBy = Array.from(likedBy);
         
-        // Cập nhật lên Supabase
-        await supabaseClient
-            .from('posts')
-            .update({ likes: img.likes, liked_by: img.likedBy })
-            .eq('id', img.id);
+        await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
 
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
         this.renderGallery(); 
     },
-    // --- BÌNH LUẬN GỘP 1 Ô CHUẨN FACEBOOK/PINTEREST ---
+
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';
@@ -1472,11 +1383,9 @@ async loadData() {
         const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         const authorName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
 
-        // --- BƯỚC MỚI: CHUẨN BỊ ĐỊA CHỈ NHẬN THÔNG BÁO ---
-        let targetEmail = img.owner; // Mặc định: Bình luận mới thì gửi cho chủ bài viết
+        let targetEmail = img.owner; 
         let notiMessage = `💬 ${authorName} vừa bình luận: "${text}" vào ảnh "${img.title}"`;
 
-        // 1. Xử lý logic bình luận locally
         if (this.state.replyingToId && text.startsWith('@')) {
             const parentComment = img.comments.find(c => c.id === this.state.replyingToId);
             if (parentComment) {
@@ -1487,12 +1396,9 @@ async loadData() {
                     time: timeStr
                 });
 
-                // TÌM NGƯỜI ĐỂ BÁO THÔNG BÁO KHI CÓ REPLY
-                // Tìm email của người đã viết cái bình luận gốc (parentComment)
                 const targetUserObj = this.state.allUsers.find(u => u.name === parentComment.user || u.email.split('@')[0] === parentComment.user);
-                
                 if (targetUserObj) {
-                    targetEmail = targetUserObj.email; // Đổi hướng: Gửi cho người bị reply
+                    targetEmail = targetUserObj.email;
                     notiMessage = `↩️ ${authorName} vừa trả lời bình luận của bạn: "${text}"`;
                 }
             }
@@ -1509,30 +1415,22 @@ async loadData() {
             this.state.replyingToId = null;
         }
 
-        // 2. CẬP NHẬT LÊN SUPABASE
-        const { error } = await supabaseClient
-            .from('posts')
-            .update({ comments: img.comments })
-            .eq('id', img.id);
+        const { error } = await supabaseClient.from('posts').update({ comments: img.comments }).eq('id', img.id);
 
         if (error) {
-            console.error("Lỗi khi lưu bình luận lên Supabase:", error);
             alert("Không thể lưu bình luận, vui lòng thử lại!");
             return;
         }
         
-        // 3. Các hàm bổ trợ
         this.saveImages(); 
         this.renderComments(img);
         input.value = '';
         
-        // 4. Bắn Thông báo (THÔNG MINH HƠN)
-        // Check điều kiện: Không tự gửi thông báo cho chính mình (Tự comment ảnh mình hoặc tự reply mình)
         if (targetEmail !== this.state.currentUser.email) {
             this.pushNotification(targetEmail, notiMessage, img.id);
         }
-    },    
-    // --- TÍNH NĂNG TÌM KIẾM HÌNH ẢNH BẰNG AI ---
+    },
+    
     performAISearch() {
         const currentImg = this.state.images.find(i => i.id === this.state.activeImageId);
         if (!currentImg) return;
@@ -1540,7 +1438,6 @@ async loadData() {
         const aiSection = document.getElementById('aiSimilarSection');
         const aiGrid = document.getElementById('aiSimilarGrid');
         
-        // Bật/tắt khu vực AI khi bấm nhiều lần
         if (!aiSection.classList.contains('hidden')) {
             aiSection.classList.add('hidden');
             return;
@@ -1549,7 +1446,6 @@ async loadData() {
         aiSection.classList.remove('hidden');
         aiGrid.innerHTML = '';
 
-        // Thuật toán AI: Quét và lọc các ảnh có chung Thể loại (Category)
         const similarImages = this.state.images.filter(img => img.category === currentImg.category && img.id !== currentImg.id);
 
         if (similarImages.length === 0) {
@@ -1570,13 +1466,11 @@ async loadData() {
                 card.appendChild(img);
                 card.appendChild(overlay);
 
-                // Bấm vào ảnh tương tự sẽ mở modal của ảnh đó
                 card.onclick = () => {
                     this.openDetailModal(item);
-                    document.querySelector('.detail-scrollable').scrollTop = 0; // Cuộn lên đầu
+                    document.querySelector('.detail-scrollable').scrollTop = 0; 
                 };
                 
-                // Cắt cúp Masonry chuẩn kích thước 2 cột
                 img.onload = (e) => {
                     const width = img.getBoundingClientRect().width || 180; 
                     const height = (img.naturalHeight / img.naturalWidth) * width;
@@ -1587,13 +1481,11 @@ async loadData() {
             });
         }
         
-        // Tự động cuộn xuống khu vực ảnh AI một cách mượt mà
         setTimeout(() => {
             aiSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 100);
     },
 
-    // --- CÀI ĐẶT PROFILE (AVATAR, ĐỔI TÊN) ---
     switchProfileTab(tabName) {
         document.querySelectorAll('.profile-tabs .tab-item').forEach(t => t.classList.remove('active'));
         document.querySelector(`.profile-tabs .tab-item[data-tab="${tabName}"]`).classList.add('active');
@@ -1632,7 +1524,6 @@ async loadData() {
         } else {
             emptyState.classList.add('hidden');
             filtered.forEach(item => {
-                // Đưa ảnh vào thẻ 'card' y hệt trang chủ để fix lỗi tràn viền
                 const card = document.createElement('div');
                 card.className = 'card shadow-large';
                 card.style.cursor = 'zoom-in';
@@ -1641,7 +1532,6 @@ async loadData() {
                 img.src = item.url;
                 img.loading = 'lazy';
                 
-                // Thêm lớp phủ hover nhẹ cho đẹp mắt
                 const overlay = document.createElement('div');
                 overlay.className = 'card-overlay';
                 
@@ -1649,7 +1539,6 @@ async loadData() {
                 card.appendChild(overlay);
                 card.onclick = () => this.openDetailModal(item);
                 
-                // Công thức tính toán chiều cao tự động đẩy trang web dài ra
                 img.onload = (e) => {
                     const width = img.getBoundingClientRect().width || 260; 
                     const height = (img.naturalHeight / img.naturalWidth) * width;
@@ -1664,7 +1553,6 @@ async loadData() {
     handleAvatarUpload(e) {
         const file = e.target.files[0];
         if (file) {
-            // Nén Avatar xuống tối đa 200px, chất lượng 80%
             this.compressImage(file, 200, 0.8).then(base64Data => {
                 this.state.pendingAvatar = base64Data;
                 document.getElementById('profileAvatar').innerHTML = `<img src="${base64Data}" style="width:100%; height:100%; object-fit:cover;">`;
@@ -1693,13 +1581,11 @@ async loadData() {
             return;
         }
 
-        // Đổi nút thành trạng thái đang lưu
         const saveBtn = document.getElementById('saveSettingsBtn');
         const originalText = saveBtn.textContent;
         saveBtn.textContent = 'Đang lưu...';
         saveBtn.disabled = true;
 
-        // Chuẩn bị dữ liệu để đẩy lên Supabase
         const updates = { 
             name: newName, 
             email: newEmail 
@@ -1707,29 +1593,23 @@ async loadData() {
         if (newPass) updates.password = newPass;
         if (this.state.pendingAvatar) updates.avatar = this.state.pendingAvatar;
 
-        // Bắn lệnh UPDATE lên Supabase
-        const { error } = await supabaseClient
-            .from('users')
-            .update(updates)
-            .eq('email', this.state.currentUser.email);
+        const { error } = await supabaseClient.from('users').update(updates).eq('email', this.state.currentUser.email);
 
         if (error) {
             msg.textContent = "Có lỗi xảy ra, không thể lưu!";
             msg.className = "fs-sm fw-bold text-danger";
             msg.style.display = 'block';
         } else {
-            // Thành công: Cập nhật lại giao diện
             this.state.currentUser.name = newName;
             this.state.currentUser.email = newEmail;
             if (newPass) this.state.currentUser.password = newPass;
             if (this.state.pendingAvatar) {
                 this.state.currentUser.avatar = this.state.pendingAvatar;
-                this.state.pendingAvatar = null; // Xóa ảnh chờ
+                this.state.pendingAvatar = null; 
             }
 
             localStorage.setItem('currentUser', newEmail);
             
-            // Tải lại dữ liệu để cập nhật tên tác giả trên toàn bộ web
             await this.loadData(); 
             this.updateUIWithUser();
 
@@ -1742,22 +1622,19 @@ async loadData() {
             document.getElementById('settingNewPass').value = '';
         }
 
-        // Mở khóa nút
         saveBtn.textContent = originalText;
         saveBtn.disabled = false;
     },
-    // --- TÍNH NĂNG TRỢ LÝ AI TOÀN CẦU (GLOBAL AI CHAT) ---
+
     setupGlobalAi() {
         const aiPanel = document.getElementById('aiPanel');
         const openAiBtn = document.getElementById('openAiBtn');
         const messagesPanel = document.getElementById('messagesPanel');
 
-        // Mở Panel AI
         if (openAiBtn) {
             openAiBtn.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                // Đóng panel tin nhắn nếu đang mở để tránh đè nhau
                 if (messagesPanel) messagesPanel.classList.remove('active'); 
                 
                 if (aiPanel) {
@@ -1767,12 +1644,10 @@ async loadData() {
             };
         }
 
-        // Đóng Panel AI
         document.getElementById('closeAiBtn')?.addEventListener('click', () => {
             if (aiPanel) aiPanel.classList.remove('active');
         });
 
-        // Click ra ngoài thì tự đóng
         window.addEventListener('click', (e) => {
             if (aiPanel && aiPanel.classList.contains('active')) {
                 if (!aiPanel.contains(e.target) && openAiBtn && !openAiBtn.contains(e.target)) {
@@ -1781,19 +1656,17 @@ async loadData() {
             }
         });
 
-        // Gửi lệnh AI
         document.getElementById('sendGlobalAiBtn')?.addEventListener('click', () => this.handleGlobalAiChat());
         document.getElementById('aiGlobalInput')?.addEventListener('keypress', (e) => { if (e.key === 'Enter') this.handleGlobalAiChat(); });
     },
 
-handleGlobalAiChat() {
+    handleGlobalAiChat() {
         const input = document.getElementById('aiGlobalInput');
         const query = input.value.trim();
         if (!query) return;
 
         const historyArea = document.getElementById('aiGlobalChatHistory');
         
-        // 1. In câu hỏi của người dùng
         historyArea.innerHTML += `
             <div class="chat-bubble sent" style="align-self: flex-end; background: var(--accent-color); color: var(--text-inverse); border-radius: 20px 20px 4px 20px; padding: 10px 16px; max-width: 85%;">
                 ${query}
@@ -1802,11 +1675,9 @@ handleGlobalAiChat() {
         input.value = '';
         historyArea.scrollTop = historyArea.scrollHeight;
 
-        // 2. AI Xử lý tìm kiếm (Đã nâng cấp Bộ não Liên tưởng màu sắc)
         setTimeout(() => {
             const lowerQuery = query.toLowerCase();
             
-            // TỪ ĐIỂN SIÊU NÂNG CẤP: Dạy AI liên kết màu sắc với các Thể loại có sẵn trên trang của bạn
             const contextDictionary = {
                 "xanh biển": ["biển", "đại dương", "nước", "trời", "blue", "xanh", "phong cảnh", "du lịch"],
                 "xanh lá": ["rừng", "cây", "thảo nguyên", "lá", "thiên nhiên", "green", "cỏ", "phong cảnh", "bò", "động vật"],
@@ -1820,7 +1691,6 @@ handleGlobalAiChat() {
             };
 
             let expandedKeywords = [];
-            // AI tự động bóc tách và liên tưởng từ khóa
             for (const [key, synonyms] of Object.entries(contextDictionary)) {
                 if (lowerQuery.includes(key)) {
                     expandedKeywords = expandedKeywords.concat(synonyms);
@@ -1828,18 +1698,14 @@ handleGlobalAiChat() {
                 }
             }
 
-            // ĐÃ FIX LỖI: Bỏ điều kiện "word.length > 2" để AI nhận diện được chữ "đỏ", "lá", "bò"...
             const stopWords = ['hãy', 'tìm', 'những', 'hình', 'ảnh', 'cho', 'tôi', 'các', 'cái', 'về', 'có', 'màu', 'ngữ', 'cảnh', 'nào'];
             let originalKeywords = lowerQuery.split(' ').filter(word => !stopWords.includes(word) && word.trim().length > 0);
             
-            // Gộp tất cả từ khóa cần quét (loại bỏ trùng lặp)
             const searchKeywords = [...new Set([...originalKeywords, ...expandedKeywords])];
 
-            // AI đi chấm điểm từng bức ảnh
             let results = this.state.images.filter(img => {
                 const textData = (img.title + " " + (img.desc || "") + " " + img.category).toLowerCase();
                 
-                // Nếu khớp chính xác câu chữ (bỏ chữ "tìm ảnh", "màu")
                 const exactMatchStr = lowerQuery.replace('tìm ảnh', '').replace('màu', '').trim();
                 if (exactMatchStr.length > 1 && textData.includes(exactMatchStr)) {
                     img.tempScore = 100; 
@@ -1849,7 +1715,6 @@ handleGlobalAiChat() {
                 let matchScore = 0;
                 searchKeywords.forEach(k => {
                     if (k && textData.includes(k)) matchScore += 1;
-                    // Cộng điểm ưu tiên nếu khớp thẳng vào Thể loại (Category)
                     if (k && img.category.toLowerCase().includes(k)) matchScore += 2;
                 });
 
@@ -1857,16 +1722,13 @@ handleGlobalAiChat() {
                 return matchScore > 0;
             });
 
-            // Sắp xếp giảm dần: Ảnh nào liên quan nhất (điểm cao nhất) lên đầu
             results.sort((a, b) => b.tempScore - a.tempScore);
 
-            // 3. AI Trả lời kèm hình ảnh
             let aiResponseHtml = '';
             if (results.length > 0) {
                 aiResponseHtml = `Tôi tìm thấy ${results.length} kết quả liên quan đến yêu cầu của bạn:`;
                 let gridHtml = '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px;">';
                 
-                // Hiện tất cả ảnh kết quả
                 results.forEach(img => {
                     gridHtml += `
                         <div style="position: relative; border-radius: 8px; overflow: hidden; cursor: zoom-in;" onclick="App.openDetailModal(${img.id})">
@@ -1892,9 +1754,9 @@ handleGlobalAiChat() {
             `;
             
             historyArea.scrollTop = historyArea.scrollHeight;
-        }, 800); // Độ trễ giả lập AI suy nghĩ
+        }, 800); 
     },
-    // --- 1. TÍNH NĂNG CUỘN VÔ TẬN & SKELETON ---
+
     setupInfiniteScroll() {
         if (!this.mainWorkspace) return;
         this.mainWorkspace.addEventListener('scroll', () => {
@@ -1908,91 +1770,7 @@ handleGlobalAiChat() {
         });
     },
 
-    renderGallery(reset = false) {
-        if (!this.galleryGrid) return;
-        
-        if (reset) {
-            this.galleryGrid.innerHTML = '';
-            this.state.page = 1;
-            this.state.hasMore = true;
-        }
-
-        if (!this.state.hasMore || this.state.isLoadingMore) return;
-        this.state.isLoadingMore = true;
-
-        const filtered = this.state.images.filter(img => {
-            const matchTag = this.state.currentTag === 'All' || img.category === this.state.currentTag;
-            const matchSearch = img.title.toLowerCase().includes(this.state.searchQuery.toLowerCase());
-            return matchTag && matchSearch;
-        });
-
-        const start = (this.state.page - 1) * this.state.limit;
-        const end = start + this.state.limit;
-        const paginatedItems = filtered.slice(start, end);
-
-        if (start >= filtered.length && !reset) {
-            this.state.hasMore = false;
-            this.state.isLoadingMore = false;
-            return;
-        }
-
-        // TẠO SKELETON FAKE LOAD
-        const skeletonIds = [];
-        const loadCount = paginatedItems.length > 0 ? paginatedItems.length : 15;
-        
-        if (paginatedItems.length > 0) {
-            for(let i=0; i < loadCount; i++) {
-                const sid = 'skel_' + Date.now() + i;
-                skeletonIds.push(sid);
-                const s = document.createElement('div');
-                s.id = sid;
-                s.className = 'skeleton-card shadow-large';
-                const h = Math.floor(Math.random() * (350 - 200 + 1) + 200);
-                s.style.gridRowEnd = `span ${Math.ceil((h + 16) / 26)}`;
-                this.galleryGrid.appendChild(s);
-            }
-        }
-
-        // Delay 800ms tạo cảm giác lấy dữ liệu
-        setTimeout(() => {
-            skeletonIds.forEach(id => document.getElementById(id)?.remove());
-
-            paginatedItems.forEach(item => {
-                const card = document.createElement('div');
-                card.className = 'card shadow-large';
-                
-                const isSaved = (this.state.currentUser.boards || []).some(b => b.ids.includes(item.id));
-                const authorName = this.getUserFromEmail(item.owner)?.name || item.owner.split('@')[0];
-
-                card.innerHTML = `
-                    <img src="${item.url}" loading="lazy" style="filter: ${item.filter || 'none'};">
-                    <div class="card-overlay"></div>
-                    <button class="card-save-btn ${isSaved ? 'saved' : ''}" onclick="App.openBoardModal(${item.id}, event)">
-                        ${isSaved ? 'Đã lưu' : 'Lưu'}
-                    </button>
-                    <div class="card-details">
-                        <div class="fw-bold mb-1 card-title">${item.title}</div>
-                        <div class="fs-sm">Tác giả: ${authorName}</div>
-                    </div>
-                `;
-
-                card.onclick = () => this.openDetailModal(item);
-                card.querySelector('img').onload = (e) => {
-                    const img = e.target;
-                    const width = img.getBoundingClientRect().width || 260; 
-                    const height = (img.naturalHeight / img.naturalWidth) * width;
-                    card.style.gridRowEnd = `span ${Math.ceil((height + 16) / 26)}`; 
-                };
-                this.galleryGrid.appendChild(card);
-            });
-
-            this.state.isLoadingMore = false;
-            if (end >= filtered.length) this.state.hasMore = false;
-        }, 800);
-    },
-
-// --- 2. HỆ THỐNG THÔNG BÁO ---
-async pushNotification(targetEmail, message, imageId = null) {
+    async pushNotification(targetEmail, message, imageId = null) {
         const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
         if (targetUser) {
             if (!targetUser.notifications) targetUser.notifications = [];
@@ -2005,19 +1783,20 @@ async pushNotification(targetEmail, message, imageId = null) {
                 this.state.currentUser.notifications = targetUser.notifications;
                 this.updateNotiBadge();
             }
-            // Bắn lên Supabase
+            // Bắn thẳng lên Supabase
             await supabaseClient.from('users').update({ notifications: targetUser.notifications }).eq('email', targetEmail);
         }
     },
-        updateNotiBadge() {
+    
+    updateNotiBadge() {
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
         const badge = document.getElementById('notificationBadge');
         if(badge) {
             if(unread > 0) {
                 badge.textContent = unread > 9 ? '9+' : unread;
-                badge.classList.remove('hidden'); // Hiện cục đỏ
+                badge.classList.remove('hidden'); 
             } else {
-                badge.classList.add('hidden'); // Reset về 0 thì tự động ẩn cục đỏ
+                badge.classList.add('hidden'); 
             }
         }
     },
@@ -2037,21 +1816,19 @@ async pushNotification(targetEmail, message, imageId = null) {
         notis.forEach(n => {
             let iconHtml = '🔔';
             if(n.text.includes('thả tim')) iconHtml = '❤️';
-            else if(n.text.includes('bình luận')) iconHtml = '💬';
+            else if(n.text.includes('bình luận') || n.text.includes('nhắn tin')) iconHtml = '💬';
             else if(n.text.includes('đăng')) iconHtml = '🎉';
 
-            // Tạo phần tử thông báo
             const item = document.createElement('div');
             item.className = `noti-item ${n.read ? 'read' : 'unread'}`;
             
-            // XỬ LÝ CLICK: BẤM VÀO THÔNG BÁO -> MỞ ẢNH
             if (n.imageId) {
                 item.style.cursor = 'pointer';
                 item.onclick = () => {
                     const targetImg = this.state.images.find(img => img.id === n.imageId);
                     if (targetImg) {
-                        document.getElementById('notificationsModal').classList.add('hidden'); // Đóng bảng thông báo
-                        this.openDetailModal(targetImg); // Mở Modal Chi tiết ảnh
+                        document.getElementById('notificationsModal').classList.add('hidden'); 
+                        this.openDetailModal(targetImg); 
                     } else {
                         alert("Ảnh này đã bị xóa hoặc không còn tồn tại!");
                     }
@@ -2069,7 +1846,7 @@ async pushNotification(targetEmail, message, imageId = null) {
         });
     },
             
-async markNotificationsAsRead() {
+    async markNotificationsAsRead() {
         if (!this.state.currentUser) return;
         const notis = this.state.currentUser.notifications || [];
         let hasUnread = false;
@@ -2084,7 +1861,6 @@ async markNotificationsAsRead() {
         }
     },
     
-    // --- 4. HỆ THỐNG BẢNG (BOARDS) ---
     openBoardModal(imgId, event = null) {
         if(event) event.stopPropagation();
         this.state.imageToSaveId = imgId;
@@ -2111,7 +1887,7 @@ async markNotificationsAsRead() {
         });
     },
 
-async toggleImageInBoard(boardId) {
+    async toggleImageInBoard(boardId) {
         if (!this.state.currentUser) return;
         const b = this.state.currentUser.boards.find(x => x.id === boardId);
         if (!b) return;
@@ -2121,11 +1897,7 @@ async toggleImageInBoard(boardId) {
 
         this.renderBoardList();
         
-        // ĐẨY LÊN SUPABASE
-        await supabaseClient
-            .from('users')
-            .update({ boards: this.state.currentUser.boards })
-            .eq('email', this.state.currentUser.email);
+        await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
     },
 
     async createNewBoard() {
@@ -2139,16 +1911,9 @@ async toggleImageInBoard(boardId) {
         nameInput.value = '';
         this.renderBoardList();
 
-        // ĐẨY LÊN SUPABASE
-        await supabaseClient
-            .from('users')
-            .update({ boards: this.state.currentUser.boards })
-            .eq('email', this.state.currentUser.email);
+        await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
     },
     
-    // =========================================================
-    // HỆ THỐNG MINI PHOTOSHOP (CANVAS API + NÉN WEBP + CẮT TỰ DO)
-    // =========================================================
     openImageEditor(src) {
         if(!this.state.editorImage) this.state.editorImage = new Image();
         this.state.editorImage.onload = () => {
@@ -2180,7 +1945,6 @@ async toggleImageInBoard(boardId) {
     },
 
     handleCanvasMouseDown(e) {
-        // NẾU ĐANG BẬT VẼ
         if (this.state.isDrawModeActive) {
             this.state.isDrawing = true;
             this.state.drawContext.beginPath();
@@ -2192,7 +1956,6 @@ async toggleImageInBoard(boardId) {
             return;
         }
         
-        // NẾU ĐANG BẬT CẮT
         if (this.state.isCropModeActive) {
             this.state.isDraggingCrop = true;
             const rect = e.target.getBoundingClientRect();
@@ -2209,7 +1972,6 @@ async toggleImageInBoard(boardId) {
     },
 
     handleCanvasMouseMove(e) {
-        // ĐANG VẼ
         if (this.state.isDrawModeActive && this.state.isDrawing) {
             const canvas = document.getElementById('imageCanvas');
             const rect = canvas.getBoundingClientRect();
@@ -2234,13 +1996,11 @@ async toggleImageInBoard(boardId) {
             return;
         }
 
-        // ĐANG KÉO KHUNG CẮT
         if (this.state.isCropModeActive && this.state.isDraggingCrop) {
             const rect = e.target.getBoundingClientRect();
             let currentX = e.clientX - rect.left;
             let currentY = e.clientY - rect.top;
 
-            // Giới hạn khung cắt không cho tràn ra ngoài mép ảnh
             currentX = Math.max(0, Math.min(currentX, rect.width));
             currentY = Math.max(0, Math.min(currentY, rect.height));
 
@@ -2258,14 +2018,12 @@ async toggleImageInBoard(boardId) {
     },
 
     handleCanvasMouseUp(e) {
-        // DỪNG VẼ
         if (this.state.isDrawModeActive && this.state.isDrawing) {
             this.state.isDrawing = false;
             this.state.drawContext.closePath();
             return;
         }
 
-        // DỪNG KÉO & XỬ LÝ CẮT ẢNH
         if (this.state.isCropModeActive && this.state.isDraggingCrop) {
             this.state.isDraggingCrop = false;
             const selection = document.getElementById('cropSelection');
@@ -2277,7 +2035,6 @@ async toggleImageInBoard(boardId) {
             const domW = parseFloat(selection.style.width);
             const domH = parseFloat(selection.style.height);
 
-            // Bỏ qua nếu kéo một khung quá nhỏ (chống người dùng vô tình click nhầm)
             if (domW > 20 && domH > 20) {
                 const domX = parseFloat(selection.style.left);
                 const domY = parseFloat(selection.style.top);
@@ -2288,7 +2045,6 @@ async toggleImageInBoard(boardId) {
                 this.executeFreeCrop(domX * scaleX, domY * scaleY, domW * scaleX, domH * scaleY);
             }
             
-            // Tự động tắt nút Cắt sau khi thực hiện xong
             document.getElementById('freeCropBtn').click();
         }
     },
@@ -2299,10 +2055,8 @@ async toggleImageInBoard(boardId) {
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = w;
         tempCanvas.height = h;
-        // Copy phần hình ảnh được chọn sang Canvas tạm
         tempCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h);
         
-        // Cập nhật lại kích thước Canvas chính và dán hình mới vào
         canvas.width = w;
         canvas.height = h;
         ctx.drawImage(tempCanvas, 0, 0);
@@ -2328,8 +2082,8 @@ async toggleImageInBoard(boardId) {
         const modal = document.getElementById('imageEditorModal');
         if (modal) modal.classList.add('hidden');
     },
-// --- HỆ THỐNG THEO DÕI (FOLLOW) ---
-async toggleFollow() {
+
+    async toggleFollow() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
         if(!img || !this.state.currentUser) return;
 
@@ -2365,16 +2119,13 @@ async toggleFollow() {
 
         if (!isFollowing) this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
     },    
-    // =========================================================
-    // HỆ THỐNG ÂM THANH & REAL-TIME POLLING (RADAR)
-    // =========================================================
+    
     playSound() {
-        // Tiếng "Ting" nhẹ nhàng, rất hợp để làm âm báo
         const audio = new Audio('https://actions.google.com/sounds/v1/ui/message_notification.ogg');
         audio.play().catch(() => console.log("Trình duyệt tạm thời chặn âm báo động"));
     },
 
-async pollForUpdates() {
+    async pollForUpdates() {
         if (!this.state.currentUser) return;
         let shouldPlaySound = false;
 
@@ -2396,7 +2147,7 @@ async pollForUpdates() {
                 this.updateNotiBadge();
             }
 
-            // 2. QUÉT TIN NHẮN CHAT (Giữ nguyên dùng localStorage)
+            // 2. QUÉT TIN NHẮN CHAT (Bằng localStorage cho nhẹ server)
             const chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
             const myChats = chats.filter(c => c.participants.includes(this.state.currentUser.email));
             
@@ -2428,6 +2179,7 @@ async pollForUpdates() {
             console.log("Lỗi radar:", error);
         }
     },
+    
     updateChatBadge() {
         if(!this.state.currentUser) return;
         const myChats = (this.state.conversations || []).filter(c => c.participants.includes(this.state.currentUser.email));
@@ -2444,7 +2196,6 @@ async pollForUpdates() {
         }
     },
 };
-
 
 window.App = App;
 document.addEventListener('DOMContentLoaded', () => App.init());

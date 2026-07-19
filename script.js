@@ -267,7 +267,9 @@ const App = {
             if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.add('hidden');
         });
 
-// --- XỬ LÝ UPLOAD & CẮT ẢNH MINI PHOTOSHOP ---
+// =======================================================
+        // XỬ LÝ UPLOAD & CÁC NÚT CỦA BẢNG MINI PHOTOSHOP
+        // =======================================================
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -275,32 +277,87 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        const result = ev.target.result;
-                        
-                        // 1. Ép ảnh hiện ra khung Preview ngay lập tức để không bị đơ
-                        const img = document.getElementById('uploadPreviewImg');
-                        const placeholder = document.getElementById('uploadPlaceholder');
-                        
-                        if (img && placeholder) {
-                            img.src = result;
-                            img.classList.remove('hidden');
-                            img.style.display = 'block';
-                            placeholder.classList.add('hidden');
-                            placeholder.style.display = 'none';
+                        // Kích hoạt bảng Photoshop
+                        if (typeof this.openImageEditor === 'function') {
+                            this.openImageEditor(ev.target.result); 
                         }
-
-                        // 2. Kích hoạt bảng Mini Photoshop (Sửa lỗi gọi hàm)
-                        if (typeof App.openImageEditor === 'function') {
-                            App.openImageEditor(result);
-                        }
-                        
-                        // Reset input để có thể chọn lại ảnh thoải mái
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
-        }        
+        }
+        
+        // CÁC NÚT ĐIỀU KHIỂN TRONG BẢNG PHOTOSHOP
+        document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
+        document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
+        
+        document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
+            this.resetCanvas();
+            const cropBtn = document.getElementById('freeCropBtn');
+            const drawBtn = document.getElementById('drawModeBtn');
+            const palette = document.getElementById('colorPalette');
+            
+            if(cropBtn) { cropBtn.className = 'btn-outline notranslate'; cropBtn.textContent = '✂️ Cắt Tự Do'; }
+            if(drawBtn) { drawBtn.className = 'btn-outline notranslate'; drawBtn.textContent = '🖌️ Bật Vẽ'; }
+            if(palette) palette.classList.add('hidden');
+            document.getElementById('imageCanvas').style.cursor = 'default';
+        });
+        
+        const freeCropBtn = document.getElementById('freeCropBtn');
+        const drawBtn = document.getElementById('drawModeBtn');
+        const colorPalette = document.getElementById('colorPalette');
+        const brushColor = document.getElementById('brushColor');
+        
+        freeCropBtn?.addEventListener('click', () => {
+            this.state.isCropModeActive = !this.state.isCropModeActive;
+            if (this.state.isCropModeActive) {
+                freeCropBtn.className = 'btn-primary notranslate';
+                freeCropBtn.textContent = '✂️ Đang Cắt...';
+                this.state.isDrawModeActive = false; 
+                if(drawBtn) { drawBtn.className = 'btn-outline notranslate'; drawBtn.textContent = '🖌️ Bật Vẽ'; }
+                if(colorPalette) colorPalette.classList.add('hidden');
+                document.getElementById('imageCanvas').style.cursor = 'crosshair';
+            } else {
+                freeCropBtn.className = 'btn-outline notranslate';
+                freeCropBtn.textContent = '✂️ Cắt Tự Do';
+                document.getElementById('imageCanvas').style.cursor = 'default';
+            }
+        });
+
+        drawBtn?.addEventListener('click', () => {
+            this.state.isDrawModeActive = !this.state.isDrawModeActive;
+            if (this.state.isDrawModeActive) {
+                drawBtn.className = 'btn-primary notranslate';
+                drawBtn.textContent = '🖌️ Đang Vẽ';
+                if(colorPalette) colorPalette.classList.remove('hidden');
+                this.state.isCropModeActive = false; 
+                if(freeCropBtn) { freeCropBtn.className = 'btn-outline notranslate'; freeCropBtn.textContent = '✂️ Cắt Tự Do'; }
+                document.getElementById('imageCanvas').style.cursor = 'crosshair';
+            } else {
+                drawBtn.className = 'btn-outline notranslate';
+                drawBtn.textContent = '🖌️ Bật Vẽ';
+                if(colorPalette) colorPalette.classList.add('hidden');
+                document.getElementById('imageCanvas').style.cursor = 'default';
+            }
+        });
+
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                if(brushColor) brushColor.value = e.target.dataset.color;
+                document.querySelectorAll('.color-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+            });
+        });
+
+        const canvas = document.getElementById('imageCanvas');
+        if(canvas) {
+            canvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
+            canvas.addEventListener('mousemove', (e) => this.handleCanvasMouseMove(e));
+            canvas.addEventListener('mouseup', (e) => this.handleCanvasMouseUp(e));
+            canvas.addEventListener('mouseout', (e) => this.handleCanvasMouseUp(e)); 
+        }
+        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
@@ -321,14 +378,6 @@ const App = {
                 e.target.classList.add('active');
             });
         });
-
-        const canvas = document.getElementById('imageCanvas');
-        if(canvas) {
-            canvas.addEventListener('mousedown', (e) => this.handleCanvasMouseDown(e));
-            canvas.addEventListener('mousemove', (e) => this.handleCanvasMouseMove(e));
-            canvas.addEventListener('mouseup', (e) => this.handleCanvasMouseUp(e));
-            canvas.addEventListener('mouseout', (e) => this.handleCanvasMouseUp(e)); 
-        }
         
         // --- HỆ THỐNG NHẮN TIN (CẬP NHẬT ĐỂ ĐỒNG BỘ SUPABASE) ---
         const messagesPanel = document.getElementById('messagesPanel');
@@ -1235,14 +1284,13 @@ const App = {
                 id: Date.now(), 
                 url: imgEl.src, 
                 title: title, 
-                desc: desc, // Lưu ý: Cột trong Supabase của bạn phải tên là "desc"
+                description: desc, // Đã đổi lại thành description cho khớp Supabase
                 category: category,
                 owner: this.state.currentUser.email, 
                 likes: 0, 
                 liked_by: [], 
                 comments: []
             };
-
             const { error } = await supabaseClient.from('posts').insert([newPost]);
 
             if (error) {

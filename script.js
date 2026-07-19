@@ -362,7 +362,7 @@ const App = {
         if (!App.state.conversations) App.state.conversations = JSON.parse(localStorage.getItem('conversationsData') || '[]');
         const saveConversations = () => localStorage.setItem('conversationsData', JSON.stringify(App.state.conversations));
 
-        const renderChatList = () => {
+    const renderChatList = () => {
             const listEl = document.getElementById('dynamicChatList');
             if (!listEl) return;
             listEl.innerHTML = '';
@@ -390,7 +390,8 @@ const App = {
                 item.innerHTML = `
                     ${avatarHtml}
                     <div style="flex: 1; overflow: hidden;">
-                        <strong class="text-primary fs-md" style="${isUnread ? 'color: var(--danger-color);' : ''}">${otherUser.name}</strong>
+                        <!-- ĐÃ THÊM NOTRANSLATE VÀO CLASS CỦA TÊN -->
+                        <strong class="text-primary fs-md notranslate" style="${isUnread ? 'color: var(--danger-color);' : ''}">${otherUser.name}</strong>
                         <span class="text-muted fs-sm" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; ${isUnread ? 'font-weight: 800; color: var(--text-primary);' : ''}">${lastMsg}</span>
                     </div>
                     ${isUnread ? '<div style="width: 10px; height: 10px; background: var(--danger-color); border-radius: 50%;"></div>' : ''}
@@ -399,11 +400,14 @@ const App = {
                 listEl.appendChild(item);
             });
         };
-        this.renderChatListGlobal = renderChatList; 
+        this.renderChatListGlobal = renderChatList;
 
-        const openChatRoom = (chatId, otherUser, otherEmail) => {
+    const openChatRoom = (chatId, otherUser, otherEmail) => {
             App.state.activeChatId = chatId;
-            document.getElementById('chatRecipientName').textContent = otherUser.name;
+            const nameEl = document.getElementById('chatRecipientName');
+            nameEl.textContent = otherUser.name;
+            nameEl.classList.add('notranslate'); // ĐÃ THÊM: Cấm dịch tên trên đầu phòng chat
+
             const avatarEl = document.getElementById('chatRecipientAvatar');
             if (otherUser.avatar) {
                 avatarEl.innerHTML = `<img src="${otherUser.avatar}" style="width:100%;height:100%;object-fit:cover;">`;
@@ -424,7 +428,6 @@ const App = {
             chatListView.classList.add('hidden');
             chatDetailView.classList.remove('hidden');
         };
-
         const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
@@ -468,7 +471,7 @@ const App = {
             document.getElementById('chatListView').classList.remove('hidden');
         });
 
-        const renderSuggestedUsers = (searchQuery = '') => {
+    const renderSuggestedUsers = (searchQuery = '') => {
             const listEl = document.getElementById('suggestedUsersList');
             if (!listEl) return;
             listEl.innerHTML = '';
@@ -498,8 +501,9 @@ const App = {
                 item.innerHTML = `
                     ${avatarHtml}
                     <div style="flex: 1;">
-                        <strong class="text-primary fs-md d-block">${user.name}</strong>
-                        <span class="text-muted fs-sm">@${user.email.split('@')[0]}</span>
+                        <!-- ĐÃ THÊM NOTRANSLATE VÀO CLASS CỦA TÊN -->
+                        <strong class="text-primary fs-md d-block notranslate">${user.name}</strong>
+                        <span class="text-muted fs-sm notranslate">@${user.email.split('@')[0]}</span>
                     </div>
                 `;
 
@@ -518,7 +522,6 @@ const App = {
                 listEl.appendChild(item);
             });
         };
-
         document.getElementById('searchUserInput')?.addEventListener('input', (e) => {
             renderSuggestedUsers(e.target.value.trim());
         });

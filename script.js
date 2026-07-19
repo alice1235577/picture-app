@@ -1747,7 +1747,7 @@ const App = {
         audio.play().catch(() => console.log("Trình duyệt tạm thời chặn âm báo động"));
     },
 
-    // ==========================================
+// ==========================================
     // TRÁI TIM CỦA ỨNG DỤNG - RADAR QUÉT REAL-TIME
     // ==========================================
     async pollForUpdates() {
@@ -1804,12 +1804,47 @@ const App = {
                 this.updateNotiBadge();
             }
 
+            // ---------------------------------------------------------
+            // BƯỚC MỚI: QUÉT BÌNH LUẬN & TIM CỦA ẢNH ĐANG MỞ (REAL-TIME)
+            // ---------------------------------------------------------
+            const detailModal = document.getElementById('detailModal');
+            // CHỈ quét ảnh nếu Modal chi tiết đang được mở (Để web không bị lag)
+            if (this.state.activeImageId && detailModal && !detailModal.classList.contains('hidden')) {
+                const { data: latestPost } = await supabaseClient
+                    .from('posts')
+                    .select('comments, likes, liked_by')
+                    .eq('id', this.state.activeImageId)
+                    .single();
+
+                if (latestPost) {
+                    const localPost = this.state.images.find(img => img.id === this.state.activeImageId);
+                    if (localPost) {
+                        // Kiểm tra xem có ai đó vừa Comment/Reply không
+                        const localCommentsStr = JSON.stringify(localPost.comments || []);
+                        const latestCommentsStr = JSON.stringify(latestPost.comments || []);
+                        
+                        if (localCommentsStr !== latestCommentsStr) {
+                            localPost.comments = latestPost.comments;
+                            this.renderComments(localPost); // Tự động vẽ lại bình luận ngay lập tức!
+                        }
+                        
+                        // Cập nhật luôn cả số người Thả tim (nếu có ai đó vừa nhấn thích)
+                        if (localPost.likes !== latestPost.likes) {
+                            localPost.likes = latestPost.likes;
+                            localPost.likedBy = latestPost.liked_by;
+                            const isLiked = (localPost.likedBy || []).includes(this.state.currentUser.email);
+                            const likeBtn = document.getElementById('likeBtn');
+                            if(likeBtn) likeBtn.innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${localPost.likes || 0}</span>`;
+                        }
+                    }
+                }
+            }
+
             if (shouldPlaySound) this.playSound();
         } catch (error) { 
             console.log("Radar lỗi:", error); 
         }
-    },
-    
+    },    
     updateChatBadge() {
         if(!this.state.currentUser) return;
         const myChats = (this.state.conversations || []).filter(c => c.participants.includes(this.state.currentUser.email));

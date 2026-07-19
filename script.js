@@ -131,23 +131,18 @@ const App = {
         document.getElementById('navHome')?.addEventListener('click', () => location.reload());
 // --- FIX NÚT MỞ THÔNG BÁO ---
         document.getElementById('openNotificationsBtn')?.addEventListener('click', (e) => {
-            e.stopPropagation(); // Ngăn click nhầm
+            e.stopPropagation();
             const notiModal = document.getElementById('notificationsModal');
-            
             if (notiModal) {
-                notiModal.classList.toggle('hidden'); // Click để Bật/Tắt bảng
+                notiModal.classList.toggle('hidden');
                 
                 // Nếu bảng vừa được mở ra
                 if (!notiModal.classList.contains('hidden')) {
-                    // TUYỆT CHIÊU: Đổi trạng thái sang "Đã đọc" và Xóa chấm đỏ TRƯỚC
-                    this.markNotificationsAsRead().then(() => {
-                        // SAU ĐÓ mới vẽ danh sách để các thông báo không bị in đậm
-                        this.renderNotifications(); 
-                    });
+                    this.renderNotifications(); 
+                    this.markNotificationsAsRead(); // Hàm này sẽ ép tắt chấm đỏ ngay lập tức
                 }
             }
-        });
-        document.getElementById('openProfileBtn')?.addEventListener('click', () => {
+        });        document.getElementById('openProfileBtn')?.addEventListener('click', () => {
             this.galleryGrid.classList.add('hidden');
             document.getElementById('headerWrapper').classList.add('hidden'); 
             this.profilePage.classList.remove('hidden'); 
@@ -1218,12 +1213,19 @@ const App = {
         }
         
         img.likedBy = Array.from(likedBy);
+        
+        // Cập nhật lên Supabase
         await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
 
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
         this.renderGallery(); 
-    },
 
+        // TÍNH NĂNG MỚI: Bắn thông báo khi Thả tim (Không tự thông báo cho chính mình)
+        if (isLiked && img.owner !== userEmail) {
+            const authorName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
+            this.pushNotification(img.owner, `❤️ ${authorName} vừa thả tim ảnh "${img.title}" của bạn.`, img.id);
+        }
+    },
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';
@@ -1613,59 +1615,47 @@ const App = {
         });
     },
 
-    async pushNotification(targetEmail, message, imageId = null) {
+async pushNotification(targetEmail, message, imageId = null) {
         try {
-            // 1. LẤY DANH SÁCH THÔNG BÁO MỚI NHẤT TỪ SUPABASE
-            const { data } = await supabaseClient
-                .from('users')
-                .select('notifications')
-                .eq('email', targetEmail)
-                .single();
-
-            // Nếu trên mạng có sẵn dữ liệu thì lấy, không thì tạo mảng rỗng
+            // TUYỆT CHIÊU GIỮ THÔNG BÁO CŨ: Lấy danh sách mới nhất từ Supabase về trước
+            const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
             let currentNotis = data && data.notifications ? data.notifications : [];
 
-            // 2. NHÉT THÊM THÔNG BÁO MỚI LÊN ĐẦU DANH SÁCH
+            // Nhét thông báo mới lên trên cùng
             currentNotis.unshift({ 
-                id: Date.now(), 
-                text: message, 
-                read: false, 
-                time: new Date().toLocaleString(), 
-                imageId: imageId 
+                id: Date.now(), text: message, read: false, 
+                time: new Date().toLocaleString(), imageId: imageId 
             });
             
-            // 3. Nếu là gửi cho chính mình thì hiện luôn cục chấm đỏ
+            // Cập nhật UI nếu đang gửi cho chính mình
             if (this.state.currentUser && targetEmail === this.state.currentUser.email) {
                 this.state.currentUser.notifications = currentNotis;
                 this.updateNotiBadge();
             }
-
-            // 4. BẮN DANH SÁCH ĐÃ GỘP LÊN LẠI SUPABASE CHUẨN XÁC
-            await supabaseClient
-                .from('users')
-                .update({ notifications: currentNotis })
-                .eq('email', targetEmail);
-
+            
+            // Bắn danh sách đã gộp lên lại Supabase
+            await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
         } catch (error) {
-            console.error("Lỗi khi đẩy thông báo:", error);
+            console.error("Lỗi đẩy thông báo:", error);
         }
-    },    
+    },
+    
     updateNotiBadge() {
         if(!this.state.currentUser) return;
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
         const badge = document.getElementById('notificationBadge');
-        
         if(badge) {
             if(unread > 0) {
                 badge.textContent = unread > 9 ? '9+' : unread; 
                 badge.classList.remove('hidden'); 
-                badge.style.display = 'flex'; // Ép buộc CSS hiện
+                badge.style.display = 'flex'; // Ép bằng CSS cứng cho hiện
             } else {
                 badge.classList.add('hidden'); 
-                badge.style.display = 'none'; // Ép buộc CSS ẩn hoàn toàn
+                badge.style.display = 'none'; // Ép bằng CSS cứng cho ẩn hoàn toàn
             }
         }
     },
+    
     renderNotifications() {
         const listEl = document.getElementById('notificationsList');
         if(!listEl) return;
@@ -1709,12 +1699,12 @@ const App = {
         });
     },
             
-    async markNotificationsAsRead() {
+async markNotificationsAsRead() {
         if (!this.state.currentUser) return;
         const notis = this.state.currentUser.notifications || [];
         let hasUnread = false;
 
-        // Đổi trạng thái sang "Đã đọc" ngay lập tức trên máy tính
+        // Quét và chuyển tất cả thành Đã đọc
         notis.forEach(n => { 
             if (!n.read) { 
                 n.read = true; 
@@ -1724,12 +1714,16 @@ const App = {
 
         if (hasUnread) {
             this.state.currentUser.notifications = notis;
-            this.updateNotiBadge(); // Lệnh tắt cục chấm đỏ ngay lập tức
+            this.updateNotiBadge(); // CỤC ĐỎ SẼ BIẾN MẤT TỨC THÌ TẠI DÒNG NÀY
             
-            // Bắn dữ liệu lên Supabase âm thầm phía sau
+            // Vẽ lại danh sách để bỏ in đậm các dòng chưa đọc
+            this.renderNotifications(); 
+
+            // Âm thầm lưu trạng thái đã đọc lên Supabase
             await supabaseClient.from('users').update({ notifications: notis }).eq('email', this.state.currentUser.email);
         }
-    },    
+    },
+    
     openBoardModal(imgId, event = null) {
         if(event) event.stopPropagation();
         this.state.imageToSaveId = imgId;

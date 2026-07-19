@@ -267,7 +267,7 @@ const App = {
             if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.add('hidden');
         });
 
-        // --- XỬ LÝ UPLOAD & CẮT ẢNH MINI PHOTOSHOP ---
+// --- XỬ LÝ UPLOAD & CẮT ẢNH MINI PHOTOSHOP ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -275,14 +275,36 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        this.openImageEditor(ev.target.result); 
+                        const result = ev.target.result;
+                        
+                        // 1. Ép ảnh hiện ra khung Preview ngay lập tức để không bị đơ
+                        const img = document.getElementById('uploadPreviewImg');
+                        const placeholder = document.getElementById('uploadPlaceholder');
+                        
+                        if (img && placeholder) {
+                            img.src = result;
+                            img.classList.remove('hidden');
+                            img.style.display = 'block';
+                            placeholder.classList.add('hidden');
+                            placeholder.style.display = 'none';
+                        }
+
+                        // 2. Kích hoạt bảng Mini Photoshop phía sau
+                        try {
+                            if (typeof this.openImageEditor === 'function') {
+                                this.openImageEditor(result);
+                            }
+                        } catch(err) {
+                            console.log("Lỗi bảng cắt ảnh:", err);
+                        }
+                        
+                        // Reset input để có thể chọn lại ảnh thoải mái
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
-        }
-        
+        }        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {

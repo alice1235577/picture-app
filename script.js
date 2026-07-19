@@ -289,13 +289,9 @@ const App = {
                             placeholder.style.display = 'none';
                         }
 
-                        // 2. Kích hoạt bảng Mini Photoshop phía sau
-                        try {
-                            if (typeof this.openImageEditor === 'function') {
-                                this.openImageEditor(result);
-                            }
-                        } catch(err) {
-                            console.log("Lỗi bảng cắt ảnh:", err);
+                        // 2. Kích hoạt bảng Mini Photoshop (Sửa lỗi gọi hàm)
+                        if (typeof App.openImageEditor === 'function') {
+                            App.openImageEditor(result);
                         }
                         
                         // Reset input để có thể chọn lại ảnh thoải mái
@@ -316,47 +312,8 @@ const App = {
             document.getElementById('colorPalette').classList.add('hidden');
             document.getElementById('imageCanvas').style.cursor = 'default';
         });
-        
-        const freeCropBtn = document.getElementById('freeCropBtn');
-        const drawBtn = document.getElementById('drawModeBtn');
-        const colorPalette = document.getElementById('colorPalette');
-        const brushColor = document.getElementById('brushColor');
-        
-        freeCropBtn?.addEventListener('click', () => {
-            this.state.isCropModeActive = !this.state.isCropModeActive;
-            if (this.state.isCropModeActive) {
-                freeCropBtn.className = 'btn-primary notranslate';
-                freeCropBtn.textContent = '✂️ Kéo chuột để cắt...';
-                this.state.isDrawModeActive = false; 
-                drawBtn.className = 'btn-outline notranslate';
-                drawBtn.textContent = '🖌️ Bật Vẽ';
-                colorPalette.classList.add('hidden');
-                document.getElementById('imageCanvas').style.cursor = 'crosshair';
-            } else {
-                freeCropBtn.className = 'btn-outline notranslate';
-                freeCropBtn.textContent = '✂️ Cắt Tự Do';
-                document.getElementById('imageCanvas').style.cursor = 'default';
-            }
-        });
 
-        drawBtn?.addEventListener('click', () => {
-            this.state.isDrawModeActive = !this.state.isDrawModeActive;
-            if (this.state.isDrawModeActive) {
-                drawBtn.className = 'btn-primary notranslate';
-                drawBtn.textContent = '🖌️ Đang Vẽ';
-                colorPalette.classList.remove('hidden');
-                this.state.isCropModeActive = false; 
-                freeCropBtn.className = 'btn-outline notranslate';
-                freeCropBtn.textContent = '✂️ Cắt Tự Do';
-                document.getElementById('imageCanvas').style.cursor = 'crosshair';
-            } else {
-                drawBtn.className = 'btn-outline notranslate';
-                drawBtn.textContent = '🖌️ Bật Vẽ';
-                colorPalette.classList.add('hidden');
-                document.getElementById('imageCanvas').style.cursor = 'default';
-            }
-        });
-
+        
         document.querySelectorAll('.color-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 brushColor.value = e.target.dataset.color;
@@ -1067,6 +1024,177 @@ const App = {
             this.state.isLoadingMore = false;
             if (end >= filtered.length) this.state.hasMore = false;
         }, 800);
+    },
+    // =========================================================
+    // HỆ THỐNG MINI PHOTOSHOP (CANVAS API + NÉN WEBP + CẮT TỰ DO)
+    // =========================================================
+    openImageEditor(src) {
+        if(!this.state.editorImage) this.state.editorImage = new Image();
+        this.state.editorImage.onload = () => {
+            this.resetCanvas();
+            document.getElementById('imageEditorModal').classList.remove('hidden');
+        };
+        this.state.editorImage.src = src;
+    },
+
+    resetCanvas() {
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        this.state.drawContext = ctx;
+        this.state.isDrawModeActive = false; 
+        this.state.isCropModeActive = false;
+        
+        const MAX_WIDTH = 1200;
+        let width = this.state.editorImage.width;
+        let height = this.state.editorImage.height;
+        
+        if (width > MAX_WIDTH) {
+            height = (MAX_WIDTH / width) * height;
+            width = MAX_WIDTH;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(this.state.editorImage, 0, 0, width, height);
+    },
+
+    handleCanvasMouseDown(e) {
+        if (this.state.isDrawModeActive) {
+            this.state.isDrawing = true;
+            this.state.drawContext.beginPath();
+            const rect = e.target.getBoundingClientRect();
+            const scaleX = e.target.width / rect.width;
+            const scaleY = e.target.height / rect.height;
+            this.state.lastX = (e.clientX - rect.left) * scaleX;
+            this.state.lastY = (e.clientY - rect.top) * scaleY;
+            return;
+        }
+        
+        if (this.state.isCropModeActive) {
+            this.state.isDraggingCrop = true;
+            const rect = e.target.getBoundingClientRect();
+            this.state.cropStartX = e.clientX - rect.left;
+            this.state.cropStartY = e.clientY - rect.top;
+
+            const selection = document.getElementById('cropSelection');
+            selection.style.left = this.state.cropStartX + 'px';
+            selection.style.top = this.state.cropStartY + 'px';
+            selection.style.width = '0px';
+            selection.style.height = '0px';
+            selection.classList.remove('hidden');
+        }
+    },
+
+    handleCanvasMouseMove(e) {
+        if (this.state.isDrawModeActive && this.state.isDrawing) {
+            const canvas = document.getElementById('imageCanvas');
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+            
+            const ctx = this.state.drawContext;
+            ctx.lineWidth = document.getElementById('brushSize').value;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = document.getElementById('brushColor').value;
+            
+            ctx.moveTo(this.state.lastX, this.state.lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke(); 
+            
+            this.state.lastX = x;
+            this.state.lastY = y;
+            return;
+        }
+
+        if (this.state.isCropModeActive && this.state.isDraggingCrop) {
+            const rect = e.target.getBoundingClientRect();
+            let currentX = e.clientX - rect.left;
+            let currentY = e.clientY - rect.top;
+
+            currentX = Math.max(0, Math.min(currentX, rect.width));
+            currentY = Math.max(0, Math.min(currentY, rect.height));
+
+            const x = Math.min(this.state.cropStartX, currentX);
+            const y = Math.min(this.state.cropStartY, currentY);
+            const w = Math.abs(currentX - this.state.cropStartX);
+            const h = Math.abs(currentY - this.state.cropStartY);
+
+            const selection = document.getElementById('cropSelection');
+            selection.style.left = x + 'px';
+            selection.style.top = y + 'px';
+            selection.style.width = w + 'px';
+            selection.style.height = h + 'px';
+        }
+    },
+
+    handleCanvasMouseUp(e) {
+        if (this.state.isDrawModeActive && this.state.isDrawing) {
+            this.state.isDrawing = false;
+            this.state.drawContext.closePath();
+            return;
+        }
+
+        if (this.state.isCropModeActive && this.state.isDraggingCrop) {
+            this.state.isDraggingCrop = false;
+            const selection = document.getElementById('cropSelection');
+            selection.classList.add('hidden');
+
+            const canvas = document.getElementById('imageCanvas');
+            const rect = canvas.getBoundingClientRect();
+
+            const domW = parseFloat(selection.style.width);
+            const domH = parseFloat(selection.style.height);
+
+            if (domW > 20 && domH > 20) {
+                const domX = parseFloat(selection.style.left);
+                const domY = parseFloat(selection.style.top);
+
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                this.executeFreeCrop(domX * scaleX, domY * scaleY, domW * scaleX, domH * scaleY);
+            }
+            
+            document.getElementById('freeCropBtn').click();
+        }
+    },
+
+    executeFreeCrop(x, y, w, h) {
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = w;
+        tempCanvas.height = h;
+        tempCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h);
+        
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(tempCanvas, 0, 0);
+    },
+
+    saveEditedImage() {
+        const canvas = document.getElementById('imageCanvas');
+        const finalDataUrl = canvas.toDataURL('image/webp', 0.8); 
+        
+        const img = document.getElementById('uploadPreviewImg');
+        const placeholder = document.getElementById('uploadPlaceholder');
+        
+        if (img) {
+            img.src = finalDataUrl;
+            img.classList.remove('hidden');
+            img.style.display = 'block'; 
+        }
+        if (placeholder) {
+            placeholder.classList.add('hidden');
+            placeholder.style.display = 'none';
+        }
+        
+        const modal = document.getElementById('imageEditorModal');
+        if (modal) modal.classList.add('hidden');
     },
 
     async saveNewIdea() {

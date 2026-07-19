@@ -1614,22 +1614,42 @@ const App = {
     },
 
     async pushNotification(targetEmail, message, imageId = null) {
-        const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
-        if (targetUser) {
-            if (!targetUser.notifications) targetUser.notifications = [];
-            targetUser.notifications.unshift({ 
-                id: Date.now(), text: message, read: false, 
-                time: new Date().toLocaleString(), imageId: imageId 
+        try {
+            // 1. LẤY DANH SÁCH THÔNG BÁO MỚI NHẤT TỪ SUPABASE
+            const { data } = await supabaseClient
+                .from('users')
+                .select('notifications')
+                .eq('email', targetEmail)
+                .single();
+
+            // Nếu trên mạng có sẵn dữ liệu thì lấy, không thì tạo mảng rỗng
+            let currentNotis = data && data.notifications ? data.notifications : [];
+
+            // 2. NHÉT THÊM THÔNG BÁO MỚI LÊN ĐẦU DANH SÁCH
+            currentNotis.unshift({ 
+                id: Date.now(), 
+                text: message, 
+                read: false, 
+                time: new Date().toLocaleString(), 
+                imageId: imageId 
             });
             
+            // 3. Nếu là gửi cho chính mình thì hiện luôn cục chấm đỏ
             if (this.state.currentUser && targetEmail === this.state.currentUser.email) {
-                this.state.currentUser.notifications = targetUser.notifications;
+                this.state.currentUser.notifications = currentNotis;
                 this.updateNotiBadge();
             }
-            await supabaseClient.from('users').update({ notifications: targetUser.notifications }).eq('email', targetEmail);
+
+            // 4. BẮN DANH SÁCH ĐÃ GỘP LÊN LẠI SUPABASE CHUẨN XÁC
+            await supabaseClient
+                .from('users')
+                .update({ notifications: currentNotis })
+                .eq('email', targetEmail);
+
+        } catch (error) {
+            console.error("Lỗi khi đẩy thông báo:", error);
         }
-    },
-    
+    },    
     updateNotiBadge() {
         if(!this.state.currentUser) return;
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;

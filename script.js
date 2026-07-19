@@ -1349,36 +1349,37 @@ async loadData() {
         document.getElementById('pinOptionsDropdown').classList.add('hidden');
     },
     // --- LƯU (SAVE) & THẢ TIM (LIKE) ---
-    toggleSave(id, btnEl, event) {
+async toggleSave(id, btnEl, event) {
         if (event) event.stopPropagation();
+        if (!this.state.currentUser) return;
         
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const userIdx = users.findIndex(u => u.email === this.state.currentUser.email);
+        let savedList = this.state.currentUser.savedIds || [];
+        const pos = savedList.indexOf(id);
         
-        if (userIdx !== -1) {
-            const savedList = users[userIdx].savedIds || [];
-            const pos = savedList.indexOf(id);
-            if (pos === -1) {
-                savedList.push(id);
-                if (btnEl) {
-                    btnEl.textContent = 'Đã lưu';
-                    btnEl.classList.add('saved');
-                    if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--text-secondary)';
-                }
-            } else {
-                savedList.splice(pos, 1);
-                if (btnEl) {
-                    btnEl.textContent = 'Lưu';
-                    btnEl.classList.remove('saved');
-                    if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--accent-color)';
-                }
+        if (pos === -1) {
+            savedList.push(id); // Lưu
+            if (btnEl) {
+                btnEl.textContent = 'Đã lưu';
+                btnEl.classList.add('saved');
+                if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--text-secondary)';
             }
-            users[userIdx].savedIds = savedList;
-            localStorage.setItem('localUsers', JSON.stringify(users));
-            this.state.currentUser = users[userIdx];
+        } else {
+            savedList.splice(pos, 1); // Bỏ lưu
+            if (btnEl) {
+                btnEl.textContent = 'Lưu';
+                btnEl.classList.remove('saved');
+                if(btnEl.id === 'savePinBtn') btnEl.style.backgroundColor = 'var(--accent-color)';
+            }
         }
-    },
+        
+        this.state.currentUser.savedIds = savedList;
 
+        // ĐẨY LÊN SUPABASE
+        await supabaseClient
+            .from('users')
+            .update({ savedIds: savedList })
+            .eq('email', this.state.currentUser.email);
+    },
     toggleSaveDetail() {
         this.toggleSave(this.state.activeImageId, document.getElementById('savePinBtn'));
         this.renderGallery();
@@ -1982,34 +1983,35 @@ handleGlobalAiChat() {
         }, 800);
     },
 
-    // --- 2. HỆ THỐNG THÔNG BÁO ---
-// --- HỆ THỐNG THÔNG BÁO ---
-    pushNotification(targetEmail, message, imageId = null) {
-        let users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        let userIndex = users.findIndex(x => x.email === targetEmail);
+// --- 2. HỆ THỐNG THÔNG BÁO ---
+    async pushNotification(targetEmail, message, imageId = null) {
+        // Tìm user nhận thông báo trong danh sách tất cả users
+        const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
         
-        if(userIndex > -1) {
-            if (!users[userIndex].notifications) {
-                users[userIndex].notifications = [];
-            }
+        if (targetUser) {
+            if (!targetUser.notifications) targetUser.notifications = [];
             
-            users[userIndex].notifications.unshift({ 
+            targetUser.notifications.unshift({ 
                 id: Date.now(), 
                 text: message, 
                 read: false, 
                 time: new Date().toLocaleString(),
-                imageId: imageId // Bắt buộc lưu ID ảnh để bấm vào xem được
+                imageId: imageId 
             });
             
-            localStorage.setItem('localUsers', JSON.stringify(users));
-            
+            // Nếu gửi cho chính mình, cập nhật UI luôn
             if (this.state.currentUser && targetEmail === this.state.currentUser.email) {
-                this.state.currentUser.notifications = users[userIndex].notifications;
+                this.state.currentUser.notifications = targetUser.notifications;
                 this.updateNotiBadge();
             }
+
+            // ĐẨY LÊN SUPABASE
+            await supabaseClient
+                .from('users')
+                .update({ notifications: targetUser.notifications })
+                .eq('email', targetEmail);
         }
     },
-
     updateNotiBadge() {
         const unread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
         const badge = document.getElementById('notificationBadge');
@@ -2070,19 +2072,32 @@ handleGlobalAiChat() {
         });
     },
             
-    markNotificationsAsRead() {
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const idx = users.findIndex(u => u.email === this.state.currentUser.email);
-        if(idx > -1) {
-            // Đánh dấu tất cả là đã đọc
-            users[idx].notifications.forEach(n => n.read = true);
-            localStorage.setItem('localUsers', JSON.stringify(users));
-            this.state.currentUser = users[idx];
-            // Gọi hàm update để xóa cục đỏ
+async markNotificationsAsRead() {
+        if (!this.state.currentUser) return;
+        
+        const notis = this.state.currentUser.notifications || [];
+        let hasUnread = false;
+
+        // Đánh dấu tất cả là đã đọc
+        notis.forEach(n => {
+            if (!n.read) {
+                n.read = true;
+                hasUnread = true;
+            }
+        });
+
+        if (hasUnread) {
+            // Cập nhật giao diện
+            this.state.currentUser.notifications = notis;
             this.updateNotiBadge();
+
+            // ĐẨY LÊN SUPABASE
+            await supabaseClient
+                .from('users')
+                .update({ notifications: notis })
+                .eq('email', this.state.currentUser.email);
         }
     },
-
     // --- 4. HỆ THỐNG BẢNG (BOARDS) ---
     openBoardModal(imgId, event = null) {
         if(event) event.stopPropagation();
@@ -2110,34 +2125,41 @@ handleGlobalAiChat() {
         });
     },
 
-    toggleImageInBoard(boardId) {
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const userIdx = users.findIndex(u => u.email === this.state.currentUser.email);
-        if (userIdx > -1) {
-            const b = users[userIdx].boards.find(x => x.id === boardId);
-            const pos = b.ids.indexOf(this.state.imageToSaveId);
-            if (pos > -1) b.ids.splice(pos, 1); else b.ids.push(this.state.imageToSaveId);
+async toggleImageInBoard(boardId) {
+        if (!this.state.currentUser) return;
+        const b = this.state.currentUser.boards.find(x => x.id === boardId);
+        if (!b) return;
 
-            localStorage.setItem('localUsers', JSON.stringify(users));
-            this.state.currentUser = users[userIdx];
-            this.renderBoardList();
-        }
+        const pos = b.ids.indexOf(this.state.imageToSaveId);
+        if (pos > -1) b.ids.splice(pos, 1); else b.ids.push(this.state.imageToSaveId);
+
+        this.renderBoardList();
+        
+        // ĐẨY LÊN SUPABASE
+        await supabaseClient
+            .from('users')
+            .update({ boards: this.state.currentUser.boards })
+            .eq('email', this.state.currentUser.email);
     },
 
-    createNewBoard() {
+    async createNewBoard() {
         const nameInput = document.getElementById('newBoardName');
         const name = nameInput.value.trim();
-        if(!name) return;
+        if(!name || !this.state.currentUser) return;
         
-        const users = JSON.parse(localStorage.getItem('localUsers'));
-        const userIdx = users.findIndex(u => u.email === this.state.currentUser.email);
-        users[userIdx].boards.push({ id: 'b_' + Date.now(), name: name, ids: [this.state.imageToSaveId] });
+        if (!this.state.currentUser.boards) this.state.currentUser.boards = [];
+        this.state.currentUser.boards.push({ id: 'b_' + Date.now(), name: name, ids: [this.state.imageToSaveId] });
         
-        localStorage.setItem('localUsers', JSON.stringify(users));
-        this.state.currentUser = users[userIdx];
         nameInput.value = '';
         this.renderBoardList();
+
+        // ĐẨY LÊN SUPABASE
+        await supabaseClient
+            .from('users')
+            .update({ boards: this.state.currentUser.boards })
+            .eq('email', this.state.currentUser.email);
     },
+    
     // =========================================================
     // HỆ THỐNG MINI PHOTOSHOP (CANVAS API + NÉN WEBP + CẮT TỰ DO)
     // =========================================================
@@ -2321,58 +2343,56 @@ handleGlobalAiChat() {
         if (modal) modal.classList.add('hidden');
     },
 // --- HỆ THỐNG THEO DÕI (FOLLOW) ---
-    toggleFollow() {
+    async toggleFollow() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
-        if(!img) return;
+        if(!img || !this.state.currentUser) return;
 
         const targetEmail = img.owner;
         const myEmail = this.state.currentUser.email;
 
-        if (targetEmail === myEmail) return; // Không thể tự theo dõi chính mình
+        if (targetEmail === myEmail) return; // Không thể tự theo dõi mình
 
-        const users = JSON.parse(localStorage.getItem('localUsers') || '[]');
-        const meIdx = users.findIndex(u => u.email === myEmail);
-        const targetIdx = users.findIndex(u => u.email === targetEmail);
+        const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
+        if (!targetUser) return;
 
-        if (meIdx > -1 && targetIdx > -1) {
-            // Đảm bảo mảng tồn tại
-            if (!users[meIdx].following) users[meIdx].following = [];
-            if (!users[targetIdx].followers) users[targetIdx].followers = [];
+        // Đảm bảo mảng tồn tại
+        if (!this.state.currentUser.following) this.state.currentUser.following = [];
+        if (!targetUser.followers) targetUser.followers = [];
 
-            const isFollowing = users[meIdx].following.includes(targetEmail);
-            const followBtn = document.getElementById('followBtn');
+        const isFollowing = this.state.currentUser.following.includes(targetEmail);
+        const followBtn = document.getElementById('followBtn');
 
-            if (isFollowing) {
-                // Hủy theo dõi
-                users[meIdx].following = users[meIdx].following.filter(e => e !== targetEmail);
-                users[targetIdx].followers = users[targetIdx].followers.filter(e => e !== myEmail);
-                
-                if(followBtn) {
-                    followBtn.textContent = 'Theo dõi';
-                    followBtn.className = 'btn-primary rounded-pill';
-                }
-            } else {
-                // Bắt đầu theo dõi
-                users[meIdx].following.push(targetEmail);
-                users[targetIdx].followers.push(myEmail);
-                
-                if(followBtn) {
-                    followBtn.textContent = 'Đang theo dõi';
-                    followBtn.className = 'btn-outline rounded-pill';
-                }
+        if (isFollowing) {
+            // Hủy theo dõi
+            this.state.currentUser.following = this.state.currentUser.following.filter(e => e !== targetEmail);
+            targetUser.followers = targetUser.followers.filter(e => e !== myEmail);
+            
+            if(followBtn) {
+                followBtn.textContent = 'Theo dõi';
+                followBtn.className = 'btn-primary rounded-pill';
             }
-
-            // 1. LƯU DỮ LIỆU CẬP NHẬT FOLLOWER TRƯỚC
-            localStorage.setItem('localUsers', JSON.stringify(users));
-            this.state.currentUser = users[meIdx];
-            this.updateUIWithUser(); // Cập nhật lại số đếm trên trang cá nhân
-
-            // 2. SAU KHI LƯU XONG MỚI BẮN THÔNG BÁO (Tránh lỗi ghi đè dữ liệu)
-            if (!isFollowing) {
-                this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
+        } else {
+            // Bắt đầu theo dõi
+            this.state.currentUser.following.push(targetEmail);
+            targetUser.followers.push(myEmail);
+            
+            if(followBtn) {
+                followBtn.textContent = 'Đang theo dõi';
+                followBtn.className = 'btn-outline rounded-pill';
             }
         }
+
+        this.updateUIWithUser(); // Cập nhật lại số đếm
+
+        // ĐẨY LÊN SUPABASE CÙNG LÚC CẢ 2 NGƯỜI
+        await supabaseClient.from('users').update({ following: this.state.currentUser.following }).eq('email', myEmail);
+        await supabaseClient.from('users').update({ followers: targetUser.followers }).eq('email', targetEmail);
+
+        if (!isFollowing) {
+            this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
+        }
     },
+    
     // =========================================================
     // HỆ THỐNG ÂM THANH & REAL-TIME POLLING (RADAR)
     // =========================================================

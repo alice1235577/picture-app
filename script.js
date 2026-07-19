@@ -1049,53 +1049,91 @@ const App = {
 
     async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
+        
+        // Khóa nút để chống click đúp
         if (submitBtn && submitBtn.disabled) return; 
-        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Đang đăng...'; }
-
-        const title = document.getElementById('uploadTitle').value.trim();
-        const desc = document.getElementById('uploadDesc').value.trim();
-        const imgEl = document.getElementById('uploadPreviewImg');
-        const activeTag = document.querySelector('#uploadCategoryTags .tag-pill.active');
-        
-        if (!title || imgEl.classList.contains('hidden')) {
-            alert("Vui lòng tải ảnh và nhập tiêu đề!");
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
-            return;
+        if (submitBtn) { 
+            submitBtn.disabled = true; 
+            submitBtn.textContent = 'Đang đăng...'; 
         }
 
-        const newPost = {
-            id: Date.now(), 
-            url: imgEl.src, 
-            title: title, 
-            description: desc,
-            category: activeTag ? activeTag.dataset.val : 'Du lịch',
-            owner: this.state.currentUser.email, 
-            likes: 0, 
-            liked_by: [], 
-            comments: []
-        };
+        try {
+            const titleEl = document.getElementById('uploadTitle');
+            const descEl = document.getElementById('uploadDesc');
+            const imgEl = document.getElementById('uploadPreviewImg');
+            const activeTag = document.querySelector('#uploadCategoryTags .tag-pill.active');
+            
+            // Lấy dữ liệu an toàn (Chống lỗi màn hình trắng nếu thiếu thẻ HTML)
+            const title = titleEl ? titleEl.value.trim() : '';
+            const desc = descEl ? descEl.value.trim() : '';
+            
+            // Lấy Tên thẻ Thể loại chuẩn xác
+            let category = 'Du lịch';
+            if (activeTag) {
+                category = activeTag.dataset.val || activeTag.dataset.filter || activeTag.textContent.trim();
+            }
 
-        const { error } = await supabaseClient.from('posts').insert([newPost]);
+            // Kiểm tra điều kiện bắt buộc
+            if (!title || !imgEl || imgEl.classList.contains('hidden') || !imgEl.src) {
+                alert("Vui lòng chọn ảnh và nhập tiêu đề!");
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
+                return;
+            }
 
-        if (error) {
-            console.error("Lỗi đăng bài:", error); alert("Có lỗi xảy ra khi đăng bài!");
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
-            return;
+            // Gói dữ liệu để bắn lên Supabase
+            const newPost = {
+                id: Date.now(), 
+                url: imgEl.src, 
+                title: title, 
+                desc: desc, // Lưu ý: Cột trong Supabase của bạn phải tên là "desc"
+                category: category,
+                owner: this.state.currentUser.email, 
+                likes: 0, 
+                liked_by: [], 
+                comments: []
+            };
+
+            const { error } = await supabaseClient.from('posts').insert([newPost]);
+
+            if (error) {
+                console.error("Lỗi từ Supabase:", error); 
+                alert("Không thể đăng bài! Hãy chắc chắn bảng 'posts' trên Supabase có đủ các cột: id, url, title, desc, category, owner, likes, liked_by, comments.");
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
+                return;
+            }
+
+            // --- NẾU ĐĂNG THÀNH CÔNG ---
+            await this.loadData(); // Ép tải lại toàn bộ ảnh để hiện lên trang chủ
+            
+            // 1. Đóng Modal
+            const uploadModal = document.getElementById('uploadModal');
+            if (uploadModal) uploadModal.classList.add('hidden');
+            
+            // 2. Dọn dẹp Form sạch sẽ cho lần đăng sau
+            if (titleEl) titleEl.value = '';
+            if (descEl) descEl.value = '';
+            
+            imgEl.src = '';
+            imgEl.classList.add('hidden');
+            imgEl.style.display = 'none';
+            
+            const placeholder = document.getElementById('uploadPlaceholder');
+            if (placeholder) {
+                placeholder.classList.remove('hidden');
+                placeholder.style.display = 'flex'; // Trả lại ô nét đứt
+            }
+            
+        } catch (err) {
+            console.error("Lỗi hệ thống khi đăng:", err);
+            alert("Đã xảy ra lỗi không xác định, vui lòng F5 tải lại trang và thử lại.");
+        } finally {
+            // Luôn mở khóa nút sau khi làm xong mọi việc
+            if (submitBtn) { 
+                submitBtn.disabled = false; 
+                submitBtn.textContent = 'Đăng ý tưởng'; 
+            }
         }
-
-        await this.loadData(); 
-        
-        this.uploadModal.classList.add('hidden');
-        
-        document.getElementById('uploadTitle').value = '';
-        document.getElementById('uploadDesc').value = '';
-        imgEl.src = '';
-        imgEl.classList.add('hidden');
-        document.getElementById('uploadPlaceholder').classList.remove('hidden');
-        
-        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
-    },
-    
+    },    
     openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 

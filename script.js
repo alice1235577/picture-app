@@ -1258,7 +1258,7 @@ const App = {
         const modal = document.getElementById('imageEditorModal');
         if (modal) modal.classList.add('hidden');
     },
-    async saveNewIdea() {
+async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
         
         // Khóa nút để chống click đúp
@@ -1274,52 +1274,48 @@ const App = {
             const imgEl = document.getElementById('uploadPreviewImg');
             const activeTag = document.querySelector('#uploadCategoryTags .tag-pill.active');
             
-            // Lấy dữ liệu an toàn (Chống lỗi màn hình trắng nếu thiếu thẻ HTML)
             const title = titleEl ? titleEl.value.trim() : '';
             const desc = descEl ? descEl.value.trim() : '';
             
-            // Lấy Tên thẻ Thể loại chuẩn xác
             let category = 'Du lịch';
             if (activeTag) {
                 category = activeTag.dataset.val || activeTag.dataset.filter || activeTag.textContent.trim();
             }
 
-            // Kiểm tra điều kiện bắt buộc
             if (!title || !imgEl || imgEl.classList.contains('hidden') || !imgEl.src) {
                 alert("Vui lòng chọn ảnh và nhập tiêu đề!");
                 if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
                 return;
             }
 
-            // Gói dữ liệu để bắn lên Supabase
+            // ĐÃ SỬA LỖI TẠI ĐÂY: Trả lại đúng tên cột "description" cho khớp với Supabase cũ của bạn
             const newPost = {
                 id: Date.now(), 
                 url: imgEl.src, 
                 title: title, 
-                description: desc, // Đã đổi lại thành description cho khớp Supabase
+                description: desc, // CHUẨN XÁC
                 category: category,
                 owner: this.state.currentUser.email, 
                 likes: 0, 
                 liked_by: [], 
                 comments: []
             };
+
             const { error } = await supabaseClient.from('posts').insert([newPost]);
 
             if (error) {
-                console.error("Lỗi từ Supabase:", error); 
-                alert("Không thể đăng bài! Hãy chắc chắn bảng 'posts' trên Supabase có đủ các cột: id, url, title, desc, category, owner, likes, liked_by, comments.");
+                console.error("LỖI SUPABASE TRẢ VỀ:", error); 
+                alert("Đăng bài thất bại! Hãy nhấn F12, mở qua tab Console để xem Supabase báo lỗi chính xác là gì nhé.");
                 if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
                 return;
             }
 
-            // --- NẾU ĐĂNG THÀNH CÔNG ---
-            await this.loadData(); // Ép tải lại toàn bộ ảnh để hiện lên trang chủ
+            // Đăng thành công -> Tải lại dữ liệu
+            await this.loadData(); 
             
-            // 1. Đóng Modal
             const uploadModal = document.getElementById('uploadModal');
             if (uploadModal) uploadModal.classList.add('hidden');
             
-            // 2. Dọn dẹp Form sạch sẽ cho lần đăng sau
             if (titleEl) titleEl.value = '';
             if (descEl) descEl.value = '';
             
@@ -1330,20 +1326,20 @@ const App = {
             const placeholder = document.getElementById('uploadPlaceholder');
             if (placeholder) {
                 placeholder.classList.remove('hidden');
-                placeholder.style.display = 'flex'; // Trả lại ô nét đứt
+                placeholder.style.display = 'flex'; 
             }
             
         } catch (err) {
             console.error("Lỗi hệ thống khi đăng:", err);
             alert("Đã xảy ra lỗi không xác định, vui lòng F5 tải lại trang và thử lại.");
         } finally {
-            // Luôn mở khóa nút sau khi làm xong mọi việc
             if (submitBtn) { 
                 submitBtn.disabled = false; 
                 submitBtn.textContent = 'Đăng ý tưởng'; 
             }
         }
-    },    
+    },
+    
     openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 

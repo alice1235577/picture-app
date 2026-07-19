@@ -268,6 +268,7 @@ const App = {
 
         // --- PHOTOSHOP MINI ---
 // --- XỬ LÝ UPLOAD ẢNH ---
+// --- XỬ LÝ UPLOAD ẢNH (KHÔI PHỤC TÍNH NĂNG CẮT ẢNH) ---
         const fileInput = document.getElementById('uploadFileInput');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -275,36 +276,14 @@ const App = {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        const result = ev.target.result;
-                        
-                        // 1. CHẮC CHẮN HIỆN ẢNH TRỰC TIẾP LÊN KHUNG PREVIEW TRƯỚC
-                        const img = document.getElementById('uploadPreviewImg');
-                        const placeholder = document.getElementById('uploadPlaceholder');
-                        
-                        if (img && placeholder) {
-                            img.src = result;
-                            img.classList.remove('hidden');
-                            img.style.display = 'block';
-                            placeholder.classList.add('hidden');
-                            placeholder.style.display = 'none';
-                        }
-
-                        // 2. MỞ MINI PHOTOSHOP (NẾU CÓ) - Dùng Try Catch để chống sập
-                        try {
-                            if (document.getElementById('imageEditorModal')) {
-                                this.openImageEditor(result);
-                            }
-                        } catch(err) {
-                            console.log("Bỏ qua Mini Photoshop");
-                        }
-                        
-                        // Reset input để có thể chọn lại cùng 1 ảnh nếu muốn
+                        this.openImageEditor(ev.target.result); // Mở bảng Mini Photoshop
                         e.target.value = ''; 
                     };
                     reader.readAsDataURL(file);
                 }
             });
         }
+        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => this.saveEditedImage());
         document.getElementById('resetEditorBtn')?.addEventListener('click', () => {
@@ -988,7 +967,7 @@ const App = {
         return this.state.allUsers.find(u => u.email === email) || null;
     },
 
-    renderGallery(reset = false) {
+renderGallery(reset = false) {
         if (!this.galleryGrid) return;
         if (!this.state.currentUser) return; 
 
@@ -996,6 +975,7 @@ const App = {
             this.galleryGrid.innerHTML = '';
             this.state.page = 1;
             this.state.hasMore = true;
+            this.state.isLoadingMore = false; // CHỐNG KẸT: Ép mở khóa để lưới ảnh được vẽ lại
         }
 
         if (!this.state.hasMore || this.state.isLoadingMore) return;
@@ -1070,8 +1050,7 @@ const App = {
             if (end >= filtered.length) this.state.hasMore = false;
         }, 800);
     },
-
-    async saveNewIdea() {
+async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
         if (submitBtn && submitBtn.disabled) return; 
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Đang đăng...'; }
@@ -1088,9 +1067,15 @@ const App = {
         }
 
         const newPost = {
-            id: Date.now(), url: imgEl.src, title: title, description: desc,
+            id: Date.now(), 
+            url: imgEl.src, 
+            title: title, 
+            description: desc,
             category: activeTag ? activeTag.dataset.val : 'Du lịch',
-            owner: this.state.currentUser.email, likes: 0, liked_by: [], comments: []
+            owner: this.state.currentUser.email, 
+            likes: 0, 
+            liked_by: [], 
+            comments: []
         };
 
         const { error } = await supabaseClient.from('posts').insert([newPost]);
@@ -1101,9 +1086,10 @@ const App = {
             return;
         }
 
-        this.state.images.unshift(newPost);
+        // ĐÃ SỬA: Ép tải lại toàn bộ dữ liệu từ Supabase để đảm bảo hiện ảnh ngay lập tức
+        await this.loadData(); 
+        
         this.uploadModal.classList.add('hidden');
-        this.renderGallery(true); 
         
         document.getElementById('uploadTitle').value = '';
         document.getElementById('uploadDesc').value = '';
@@ -1112,8 +1098,7 @@ const App = {
         document.getElementById('uploadPlaceholder').classList.remove('hidden');
         
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
-    },
-    
+    },    
     openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 

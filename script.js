@@ -1461,7 +1461,7 @@ async loadData() {
         input.focus();
     },
 
-async addComment() {
+    async addComment() {
         const input = document.getElementById('mainCommentInput');
         const text = input.value.trim();
         if(!text) return;
@@ -1472,7 +1472,11 @@ async addComment() {
         const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         const authorName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
 
-        // 1. Xử lý logic bình luận locally (giữ nguyên)
+        // --- BƯỚC MỚI: CHUẨN BỊ ĐỊA CHỈ NHẬN THÔNG BÁO ---
+        let targetEmail = img.owner; // Mặc định: Bình luận mới thì gửi cho chủ bài viết
+        let notiMessage = `💬 ${authorName} vừa bình luận: "${text}" vào ảnh "${img.title}"`;
+
+        // 1. Xử lý logic bình luận locally
         if (this.state.replyingToId && text.startsWith('@')) {
             const parentComment = img.comments.find(c => c.id === this.state.replyingToId);
             if (parentComment) {
@@ -1482,6 +1486,15 @@ async addComment() {
                     text: text,
                     time: timeStr
                 });
+
+                // TÌM NGƯỜI ĐỂ BÁO THÔNG BÁO KHI CÓ REPLY
+                // Tìm email của người đã viết cái bình luận gốc (parentComment)
+                const targetUserObj = this.state.allUsers.find(u => u.name === parentComment.user || u.email.split('@')[0] === parentComment.user);
+                
+                if (targetUserObj) {
+                    targetEmail = targetUserObj.email; // Đổi hướng: Gửi cho người bị reply
+                    notiMessage = `↩️ ${authorName} vừa trả lời bình luận của bạn: "${text}"`;
+                }
             }
             this.state.replyingToId = null; 
         } else {
@@ -1497,7 +1510,6 @@ async addComment() {
         }
 
         // 2. CẬP NHẬT LÊN SUPABASE
-        // Chúng ta cập nhật toàn bộ mảng bình luận mới cho bài viết này
         const { error } = await supabaseClient
             .from('posts')
             .update({ comments: img.comments })
@@ -1510,14 +1522,16 @@ async addComment() {
         }
         
         // 3. Các hàm bổ trợ
-        this.saveImages(); // Hàm này bạn đã sửa thành async trước đó rồi
+        this.saveImages(); 
         this.renderComments(img);
         input.value = '';
         
-        // 4. Thông báo
-        this.pushNotification(img.owner, `💬 ${authorName} vừa bình luận: "${text}" vào ảnh "${img.title}"`, img.id);
-    },
-    
+        // 4. Bắn Thông báo (THÔNG MINH HƠN)
+        // Check điều kiện: Không tự gửi thông báo cho chính mình (Tự comment ảnh mình hoặc tự reply mình)
+        if (targetEmail !== this.state.currentUser.email) {
+            this.pushNotification(targetEmail, notiMessage, img.id);
+        }
+    },    
     // --- TÍNH NĂNG TÌM KIẾM HÌNH ẢNH BẰNG AI ---
     performAISearch() {
         const currentImg = this.state.images.find(i => i.id === this.state.activeImageId);

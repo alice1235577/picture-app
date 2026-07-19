@@ -1437,37 +1437,55 @@ async saveNewIdea() {
         if (!this.profilePage.classList.contains('hidden')) this.renderProfileData('saved');
     },
 
-    async toggleLikeDetail() {
+async toggleLikeDetail() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
-        if(!img || !this.state.currentUser) return;
-        
-        const userEmail = this.state.currentUser.email;
-        const likedBy = new Set(img.likedBy || []);
-        let isLiked = false;
+        if (!img || !this.state.currentUser) return;
 
-        if (likedBy.has(userEmail)) {
-            likedBy.delete(userEmail);
-            img.likes = Math.max(0, (img.likes || 1) - 1);
-        } else {
-            likedBy.add(userEmail);
+        const myEmail = this.state.currentUser.email;
+        // Đảm bảo likedBy là một mảng
+        let likedBy = Array.isArray(img.likedBy) ? img.likedBy : [];
+        const isCurrentlyLiked = likedBy.includes(myEmail);
+
+        // 1. CẬP NHẬT GIAO DIỆN TỨC THÌ (Instant UI Update)
+        const likeBtn = document.getElementById('likeBtn');
+        const likeCountTxt = document.getElementById('likeCountTxt');
+        
+        let newLikeStatus = !isCurrentlyLiked;
+        if (newLikeStatus) {
+            // Người dùng vừa mới Like
+            likedBy.push(myEmail);
             img.likes = (img.likes || 0) + 1;
-            isLiked = true;
+        } else {
+            // Người dùng vừa bỏ Like
+            likedBy = likedBy.filter(email => email !== myEmail);
+            img.likes = Math.max(0, (img.likes || 1) - 1);
         }
-        
-        img.likedBy = Array.from(likedBy);
-        
-        await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
 
-        document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
-        this.renderGallery(); 
+        // Cập nhật lên State
+        img.likedBy = likedBy;
+        
+        // Cập nhật giao diện
+        likeBtn.innerHTML = `${newLikeStatus ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
 
-        if (isLiked && img.owner !== userEmail) {
-            const myName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
-            const message = `❤️ ${myName} vừa thả tim ảnh "${img.title}" của bạn.`;
+        // 2. CẬP NHẬT LÊN DATABASE (Supabase)
+        await supabaseClient
+            .from('posts')
+            .update({ 
+                likes: img.likes, 
+                liked_by: likedBy 
+            })
+            .eq('id', img.id);
+
+        // 3. GỬI THÔNG BÁO (Chỉ gửi khi là Like mới và không tự tim cho mình)
+        if (newLikeStatus && img.owner !== myEmail) {
+            const myName = this.state.currentUser.name || myEmail.split('@')[0];
+            const message = `❤️ ${myName} đã thích ảnh của bạn!`;
             this.pushNotification(img.owner, message, img.id);
         }
-    },
-    
+        
+        // Cập nhật lại gallery để thay đổi đồng bộ bên ngoài
+        this.renderGallery(); 
+    },    
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';

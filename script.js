@@ -14,8 +14,6 @@ const App = {
         activeImageId: null,
         replyingToId: null,
         images: [],
-        
-        // Data mới cho 4 tính năng
         page: 1,
         limit: 15,
         isLoadingMore: false,
@@ -31,7 +29,6 @@ const App = {
             this.cacheDOM();
             this.bindEvents();
             
-            // Chờ tải xong data từ Supabase rồi mới vẽ
             await this.loadData(); 
             
             this.applyTheme();
@@ -40,23 +37,9 @@ const App = {
             this.handleScrollEffect();
             this.setupInfiniteScroll();
 
-            setInterval(() => this.updateGreeting(), 60000);
-            setInterval(() => this.pollForUpdates(), 10000); // Radar quét 10s/lần tránh lag server
+            setInterval(() => this.updateGreeting(), 10000);
+            setInterval(() => this.pollForUpdates(), 3000); // Tăng tốc độ Radar để nhận tin nhắn cực nhanh
             
-            // ĐỒNG BỘ TIN NHẮN REAL-TIME GIỮA CÁC TAB
-            window.addEventListener('storage', (e) => {
-                if (e.key === 'conversationsData') {
-                    this.state.conversations = JSON.parse(e.newValue || '[]');
-                    this.updateChatBadge();
-                    
-                    const msgPanel = document.getElementById('messagesPanel');
-                    if (msgPanel && msgPanel.classList.contains('active')) {
-                        if (typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
-                        if (typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
-                    }
-                }
-            });
-
         } catch (error) {
             console.error("Lỗi khởi tạo App:", error);
         }
@@ -65,13 +48,9 @@ const App = {
     autoSmartTheme() {
         const savedTheme = localStorage.getItem('darkMode');
         const hour = new Date().getHours();
-        
         if (savedTheme === null) {
-            if (hour >= 19 || hour < 6) { 
-                this.state.theme = 'dark';
-            } else {
-                this.state.theme = 'light';
-            }
+            if (hour >= 19 || hour < 6) this.state.theme = 'dark';
+            else this.state.theme = 'light';
         }
     },    
      
@@ -80,7 +59,6 @@ const App = {
         this.authScreen = document.getElementById('authScreen');
         this.galleryGrid = document.getElementById('galleryGrid');
         this.profilePage = document.getElementById('profilePage');
-        
         this.uploadModal = document.getElementById('uploadModal');
         this.detailModal = document.getElementById('detailModal');
         this.notiModal = document.getElementById('notificationsModal');
@@ -142,22 +120,15 @@ const App = {
         // --- BACKGROUND ---
         const themeBtn = document.getElementById('themePaletteBtn');
         const themeDropdown = document.getElementById('themeDropdown');
-        
         if (themeBtn && themeDropdown) {
-            themeBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                themeDropdown.classList.toggle('hidden');
-            });
-            window.addEventListener('click', (e) => {
-                if (!themeDropdown.contains(e.target)) themeDropdown.classList.add('hidden');
-            });
+            themeBtn.addEventListener('click', (e) => { e.stopPropagation(); themeDropdown.classList.toggle('hidden'); });
+            window.addEventListener('click', (e) => { if (!themeDropdown.contains(e.target)) themeDropdown.classList.add('hidden'); });
         }
         document.getElementById('bgUploadInput')?.addEventListener('change', (e) => this.handleBackgroundUpload(e));
         document.getElementById('removeBgBtn')?.addEventListener('click', () => this.removeCustomBackground());
         
         // --- NAVIGATION ---
         document.getElementById('navHome')?.addEventListener('click', () => location.reload());
-        
         document.getElementById('openNotificationsBtn')?.addEventListener('click', () => {
             const notiModal = document.getElementById('notificationsModal');
             if (notiModal) notiModal.classList.remove('hidden');
@@ -206,7 +177,6 @@ const App = {
             if (e.target === this.uploadModal) this.uploadModal.classList.add('hidden');
             if (e.target === this.detailModal) this.detailModal.classList.add('hidden');
             if (e.target === this.notiModal) this.notiModal.classList.add('hidden');
-            
             const menu = document.getElementById('pinOptionsDropdown');
             const btn = document.getElementById('moreOptionsBtn');
             if (menu && !menu.classList.contains('hidden') && e.target !== btn && !btn.contains(e.target)) {
@@ -219,18 +189,15 @@ const App = {
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget;
                 const container = target.closest('.tags-container');
-                
                 container.querySelectorAll('.tag-pill').forEach(b => {
                     b.classList.remove('active', 'solid-tag');
                     if (container.id === 'uploadCategoryTags') b.classList.add('outline-tag');
                 });
-                
                 target.classList.add('active');
                 if (container.id === 'uploadCategoryTags') {
                     target.classList.add('solid-tag');
                     target.classList.remove('outline-tag');
                 }
-
                 if (container.id === 'categoryTags') {
                     this.state.currentTag = target.dataset.filter;
                     this.renderGallery(true); 
@@ -263,27 +230,20 @@ const App = {
 
         searchInput.addEventListener('input', (e) => {
             const val = e.target.value.trim().toLowerCase();
-            if (!val) { 
-                searchDropdown.classList.add('hidden'); 
-                return; 
-            }
-            
-            const suggestions = [...new Set(this.state.images
-                .filter(img => img.title.toLowerCase().includes(val))
-                .map(img => img.title))].slice(0, 5);
-            
+            if (!val) { searchDropdown.classList.add('hidden'); return; }
+            const suggestions = [...new Set(this.state.images.filter(img => img.title.toLowerCase().includes(val)).map(img => img.title))].slice(0, 5);
             if (suggestions.length > 0) renderDropdown('suggestions', suggestions);
             else searchDropdown.classList.add('hidden');
         });
 
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                e.preventDefault(); // CHỐNG LOAD LẠI TRANG
                 const query = e.target.value.trim();
                 if (query) {
                     let recents = JSON.parse(localStorage.getItem('recentSearches') || '[]');
                     recents = [query, ...recents.filter(i => i !== query)].slice(0, 5);
                     localStorage.setItem('recentSearches', JSON.stringify(recents));
-                    
                     this.state.searchQuery = query;
                     this.renderGallery(true);
                     searchDropdown.classList.add('hidden');
@@ -385,7 +345,7 @@ const App = {
         }
         
         // ===================================================================
-        // HỆ THỐNG NHẮN TIN 
+        // HỆ THỐNG NHẮN TIN (CẬP NHẬT ĐỂ ĐỒNG BỘ SUPABASE)
         // ===================================================================
         const messagesPanel = document.getElementById('messagesPanel');
         const chatListView = document.getElementById('chatListView');
@@ -393,9 +353,7 @@ const App = {
         const chatDetailView = document.getElementById('chatDetailView');
         const openChatBtn = document.getElementById('openChatBtn');
         
-        if (!App.state.conversations) {
-            App.state.conversations = JSON.parse(localStorage.getItem('conversationsData') || '[]');
-        }
+        if (!App.state.conversations) App.state.conversations = JSON.parse(localStorage.getItem('conversationsData') || '[]');
         const saveConversations = () => localStorage.setItem('conversationsData', JSON.stringify(App.state.conversations));
 
         const renderChatList = () => {
@@ -416,7 +374,6 @@ const App = {
                 const otherEmail = chat.participants.find(e => e !== myEmail);
                 const otherUser = App.getUserFromEmail(otherEmail) || { name: otherEmail.split('@')[0], avatar: null };
                 const lastMsg = chat.messages.length > 0 ? chat.messages[chat.messages.length - 1].text : 'Bắt đầu trò chuyện...';
-                
                 const isUnread = chat.unreadFor && chat.unreadFor.includes(myEmail);
                 
                 const item = document.createElement('div');
@@ -450,7 +407,6 @@ const App = {
                 avatarEl.style.background = 'var(--accent-color)';
             }
             
-            // XÓA TRẠNG THÁI CHƯA ĐỌC KHI MỞ PHÒNG CHAT
             const chat = App.state.conversations.find(c => c.id === chatId);
             if (chat && chat.unreadFor && chat.unreadFor.includes(App.state.currentUser.email)) {
                 chat.unreadFor = chat.unreadFor.filter(e => e !== App.state.currentUser.email);
@@ -597,8 +553,8 @@ const App = {
             });
         }
 
-        // B. Lõi Gửi Tin Nhắn (ĐÃ FIX LỖI THÔNG BÁO)
-        const sendMessage = () => {
+        // LÕI NHẮN TIN - ĐÃ HACK ĐỂ ĐỒNG BỘ QUA SUPABASE
+        const sendMessage = async () => {
             const input = document.getElementById('chatMessageInput');
             const text = input.value.trim();
             if (!text || !App.state.activeChatId) return;
@@ -610,12 +566,7 @@ const App = {
                 const myEmail = App.state.currentUser.email;
                 const targetEmail = chats[chatIdx].participants.find(p => p !== myEmail);
 
-                // Đẩy tin nhắn vào mảng
                 chats[chatIdx].messages.push({ sender: myEmail, text: text, time: Date.now() });
-                
-                // Đánh dấu đỏ cho người nhận
-                chats[chatIdx].unreadFor = [targetEmail];
-                
                 localStorage.setItem('conversationsData', JSON.stringify(chats));
                 App.state.conversations = chats; 
                 
@@ -624,32 +575,42 @@ const App = {
                 
                 input.value = ''; 
 
-                // GỬI CHUÔNG THÔNG BÁO TỚI SUPABASE CHO ĐỐI PHƯƠNG
+                // Hack: Bắn gói tin nhắn qua hệ thống Notifications của Supabase
                 if (targetEmail) {
-                    App.pushNotification(targetEmail, `💬 ${App.state.currentUser.name} vừa gửi cho bạn một tin nhắn.`);
+                    const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
+                    let currentNotis = data ? (data.notifications || []) : [];
+                    
+                    // Gói tin nhắn tàng hình (để radar đối phương lấy)
+                    currentNotis.push({
+                        id: Date.now(), type: 'chat_msg', sender: myEmail, text: text, read: false, time: Date.now()
+                    });
+                    
+                    // Thông báo rung chuông
+                    currentNotis.unshift({ 
+                        id: Date.now() + 1, text: `💬 ${App.state.currentUser.name} vừa gửi cho bạn một tin nhắn.`, 
+                        read: false, time: new Date().toLocaleString() 
+                    });
+
+                    await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
                 }
             }
         };
 
         document.getElementById('sendChatMessageBtn')?.addEventListener('click', sendMessage);
         document.getElementById('chatMessageInput')?.addEventListener('keypress', (e) => { 
-            if (e.key === 'Enter') sendMessage(); 
+            if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } // CHỐNG F5 KHI NHẤN ENTER
         });
         
         if (openChatBtn) {
             openChatBtn.onclick = function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
+                e.preventDefault(); e.stopPropagation();
                 const msgPanel = document.getElementById('messagesPanel');
                 const aiPanel = document.getElementById('aiPanel');
-
                 if (aiPanel) aiPanel.classList.remove('active');
 
                 if (msgPanel) {
                     msgPanel.classList.toggle('active');
                     msgPanel.classList.remove('hidden');
-                    
                     if (typeof renderChatList === 'function') renderChatList(); 
                     
                     document.querySelectorAll('#chatListView').forEach(v => v.classList.remove('hidden'));
@@ -694,7 +655,7 @@ const App = {
         
         document.getElementById('sendCommentBtn')?.addEventListener('click', () => this.addComment());
         document.getElementById('mainCommentInput')?.addEventListener('keypress', (e) => {
-            if(e.key === 'Enter') this.addComment();
+            if(e.key === 'Enter') { e.preventDefault(); this.addComment(); } // CHỐNG F5 KHI NHẤN ENTER
         });
 
         const emojiBtn = document.getElementById('emojiBtn');
@@ -747,14 +708,8 @@ const App = {
     },
     
     async loadData() {
-        const { data: postsData, error: postsError } = await supabaseClient
-            .from('posts')
-            .select('*')
-            .order('id', { ascending: false });
-
-        const { data: usersData, error: usersError } = await supabaseClient
-            .from('users')
-            .select('email, name, avatar');
+        const { data: postsData, error: postsError } = await supabaseClient.from('posts').select('*').order('id', { ascending: false });
+        const { data: usersData, error: usersError } = await supabaseClient.from('users').select('email, name, avatar');
 
         if (postsError || usersError) {
             console.error("Lỗi tải dữ liệu:", postsError || usersError);
@@ -766,7 +721,7 @@ const App = {
     },
 
     saveImages() {
-        localStorage.setItem('imagesData', JSON.stringify(this.state.images));
+        // Tắt hàm này đi để tránh lỗi QuotaExceededError làm sập trang khi comment
     },
 
     compressImage(file, maxWidth, quality) {
@@ -780,17 +735,10 @@ const App = {
                     const canvas = document.createElement('canvas');
                     let width = img.width;
                     let height = img.height;
-
-                    if (width > maxWidth) {
-                        height = Math.round((height * maxWidth) / width);
-                        width = maxWidth;
-                    }
-
-                    canvas.width = width;
-                    canvas.height = height;
+                    if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+                    canvas.width = width; canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    
                     const compressedBase64 = canvas.toDataURL('image/webp', quality);
                     resolve(compressedBase64);
                 };
@@ -810,7 +758,6 @@ const App = {
             this.state.currentUser.customBackground = base64Data; 
 
             this.applyCustomBackground();
-            
             const dropdown = document.getElementById('themeDropdown');
             if (dropdown) dropdown.classList.add('hidden');
         });
@@ -819,7 +766,6 @@ const App = {
     applyCustomBackground() {
         if (!this.state.currentUser) return;
         const userEmail = this.state.currentUser.email;
-        
         const bgData = localStorage.getItem(`bg_${userEmail}`) || this.state.currentUser.customBackground;
         let bgEl = document.getElementById('customBackground');
         
@@ -869,11 +815,8 @@ const App = {
     handleScrollEffect() {
         if (this.mainWorkspace && this.headerWrapper) {
             this.mainWorkspace.addEventListener('scroll', () => {
-                if (this.mainWorkspace.scrollTop > 10) {
-                    this.headerWrapper.classList.add('scrolled');
-                } else {
-                    this.headerWrapper.classList.remove('scrolled');
-                }
+                if (this.mainWorkspace.scrollTop > 10) this.headerWrapper.classList.add('scrolled');
+                else this.headerWrapper.classList.remove('scrolled');
             });
         }
     },
@@ -881,11 +824,7 @@ const App = {
     async checkAuth() { 
         const userEmail = localStorage.getItem('currentUser');
         if (userEmail) {
-            const { data: user, error } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('email', userEmail)
-                .single();
+            const { data: user, error } = await supabaseClient.from('users').select('*').eq('email', userEmail).single();
 
             if (user) {
                 this.state.currentUser = user; 
@@ -943,13 +882,7 @@ const App = {
         }
 
         if (isLogin) {
-            const { data, error } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('email', email)
-                .eq('password', password)
-                .single();
-
+            const { data, error } = await supabaseClient.from('users').select('*').eq('email', email).eq('password', password).single();
             if (data) {
                 localStorage.setItem('currentUser', email);
                 this.checkAuth();
@@ -958,10 +891,7 @@ const App = {
                 msgEl.classList.remove('hidden');
             }
         } else {
-            const { error } = await supabaseClient
-                .from('users')
-                .insert([{ email, password, name: name || email.split('@')[0], boards: [] }]);
-
+            const { error } = await supabaseClient.from('users').insert([{ email, password, name: name || email.split('@')[0], boards: [] }]);
             if (error) {
                 msgEl.textContent = "Email này đã tồn tại hoặc có lỗi!";
                 msgEl.classList.remove('hidden');
@@ -1017,17 +947,11 @@ const App = {
         let safeName = `<span class="notranslate">${userName}</span>`;
         let greetingMsg = "KHÁM PHÁ Ý TƯỞNG ✨";
         
-        if (hour >= 5 && hour < 11) {
-            greetingMsg = `CHÀO BUỔI SÁNG,&nbsp;${safeName}&nbsp; CÙNG TÌM Ý TƯỞNG NHÉ ☕`;
-        } else if (hour >= 11 && hour < 14) {
-            greetingMsg = `TRƯA RỒI,&nbsp;${safeName}&nbsp; NGHỈ NGƠI THƯ GIÃN NHÉ 🌤️`;
-        } else if (hour >= 14 && hour < 18) {
-            greetingMsg = `CHÀO BUỔI CHIỀU,&nbsp;${safeName}&nbsp; TIẾP TỤC SÁNG TẠO NÀO 🎨`;
-        } else if (hour >= 18 && hour < 22) {
-            greetingMsg = `CHÀO BUỔI TỐI,&nbsp;${safeName}&nbsp; THƯ GIÃN VÀ TẬN HƯỞNG NHÉ 🥂`;
-        } else {
-            greetingMsg = `ĐÃ KHUYA RỒI,&nbsp;${safeName}&nbsp; CHÚC BẠN MỘT ĐÊM YÊN TĨNH 🌙`;
-        }
+        if (hour >= 5 && hour < 11) greetingMsg = `CHÀO BUỔI SÁNG,&nbsp;${safeName}&nbsp; CÙNG TÌM Ý TƯỞNG NHÉ ☕`;
+        else if (hour >= 11 && hour < 14) greetingMsg = `TRƯA RỒI,&nbsp;${safeName}&nbsp; NGHỈ NGƠI THƯ GIÃN NHÉ 🌤️`;
+        else if (hour >= 14 && hour < 18) greetingMsg = `CHÀO BUỔI CHIỀU,&nbsp;${safeName}&nbsp; TIẾP TỤC SÁNG TẠO NÀO 🎨`;
+        else if (hour >= 18 && hour < 22) greetingMsg = `CHÀO BUỔI TỐI,&nbsp;${safeName}&nbsp; THƯ GIÃN VÀ TẬN HƯỞNG NHÉ 🥂`;
+        else greetingMsg = `ĐÃ KHUYA RỒI,&nbsp;${safeName}&nbsp; CHÚC BẠN MỘT ĐÊM YÊN TĨNH 🌙`;
         
         greetingEl.innerHTML = greetingMsg;
     },
@@ -1122,12 +1046,8 @@ const App = {
 
     async saveNewIdea() {
         const submitBtn = document.getElementById('submitUploadBtn');
-        
         if (submitBtn && submitBtn.disabled) return; 
-        if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'Đang đăng...';
-        }
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Đang đăng...'; }
 
         const title = document.getElementById('uploadTitle').value.trim();
         const desc = document.getElementById('uploadDesc').value.trim();
@@ -1136,30 +1056,20 @@ const App = {
         
         if (!title || imgEl.classList.contains('hidden')) {
             alert("Vui lòng tải ảnh và nhập tiêu đề!");
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = 'Đăng ý tưởng';
-            }
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
             return;
         }
 
         const newPost = {
-            id: Date.now(),
-            url: imgEl.src,
-            title: title,
-            description: desc,
+            id: Date.now(), url: imgEl.src, title: title, description: desc,
             category: activeTag ? activeTag.dataset.val : 'Du lịch',
-            owner: this.state.currentUser.email,
-            likes: 0,
-            liked_by: [], 
-            comments: []
+            owner: this.state.currentUser.email, likes: 0, liked_by: [], comments: []
         };
 
         const { error } = await supabaseClient.from('posts').insert([newPost]);
 
         if (error) {
-            console.error("Lỗi đăng bài:", error);
-            alert("Có lỗi xảy ra khi đăng bài!");
+            console.error("Lỗi đăng bài:", error); alert("Có lỗi xảy ra khi đăng bài!");
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
             return;
         }
@@ -1174,10 +1084,7 @@ const App = {
         imgEl.classList.add('hidden');
         document.getElementById('uploadPlaceholder').classList.remove('hidden');
         
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Đăng ý tưởng';
-        }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
     },
     
     openDetailModal(item) {
@@ -1199,9 +1106,7 @@ const App = {
         
         const isOwner = item.owner === this.state.currentUser.email;
         const moreBtn = document.getElementById('moreOptionsBtn');
-        if (moreBtn) {
-            moreBtn.parentElement.classList.toggle('hidden', !isOwner);
-        }
+        if (moreBtn) moreBtn.parentElement.classList.toggle('hidden', !isOwner);
 
         const isLiked = (item.likedBy || []).includes(this.state.currentUser.email);
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${item.likes || 0}</span>`;
@@ -1213,18 +1118,12 @@ const App = {
         
         const followBtn = document.getElementById('followBtn');
         if(followBtn) {
-            if (isOwner) {
-                followBtn.classList.add('hidden'); 
-            } else {
+            if (isOwner) followBtn.classList.add('hidden'); 
+            else {
                 followBtn.classList.remove('hidden');
                 const isFollowing = (this.state.currentUser.following || []).includes(item.owner);
-                if (isFollowing) {
-                    followBtn.textContent = 'Đang theo dõi';
-                    followBtn.className = 'btn-outline rounded-pill';
-                } else {
-                    followBtn.textContent = 'Theo dõi';
-                    followBtn.className = 'btn-primary rounded-pill';
-                }
+                if (isFollowing) { followBtn.textContent = 'Đang theo dõi'; followBtn.className = 'btn-outline rounded-pill'; } 
+                else { followBtn.textContent = 'Theo dõi'; followBtn.className = 'btn-primary rounded-pill'; }
             }
         }
         document.getElementById('mainCommentInput').value = ''; 
@@ -1246,14 +1145,14 @@ const App = {
         }
     },
 
-    editIdea() {
+    async editIdea() {
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
         if(!img) return;
         const newTitle = prompt("Nhập tiêu đề mới:", img.title);
         if(newTitle !== null && newTitle.trim() !== '') {
             img.title = newTitle;
             document.getElementById('detailTitle').textContent = newTitle;
-            this.saveImages();
+            await supabaseClient.from('posts').update({ title: newTitle }).eq('id', img.id);
             
             this.renderGallery(true);
             if (!this.profilePage.classList.contains('hidden')) {
@@ -1292,9 +1191,7 @@ const App = {
     toggleSaveDetail() {
         this.toggleSave(this.state.activeImageId, document.getElementById('savePinBtn'));
         this.renderGallery();
-        if (!this.profilePage.classList.contains('hidden')) {
-            this.renderProfileData('saved');
-        }
+        if (!this.profilePage.classList.contains('hidden')) this.renderProfileData('saved');
     },
 
     async toggleLikeDetail() {
@@ -1315,7 +1212,6 @@ const App = {
         }
         
         img.likedBy = Array.from(likedBy);
-        
         await supabaseClient.from('posts').update({ likes: img.likes, liked_by: img.likedBy }).eq('id', img.id);
 
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
@@ -1390,11 +1286,7 @@ const App = {
             const parentComment = img.comments.find(c => c.id === this.state.replyingToId);
             if (parentComment) {
                 if(!parentComment.replies) parentComment.replies = [];
-                parentComment.replies.push({
-                    user: authorName,
-                    text: text,
-                    time: timeStr
-                });
+                parentComment.replies.push({ user: authorName, text: text, time: timeStr });
 
                 const targetUserObj = this.state.allUsers.find(u => u.name === parentComment.user || u.email.split('@')[0] === parentComment.user);
                 if (targetUserObj) {
@@ -1405,24 +1297,14 @@ const App = {
             this.state.replyingToId = null; 
         } else {
             if(!img.comments) img.comments = [];
-            img.comments.push({
-                id: Date.now(),
-                user: authorName,
-                text: text,
-                time: timeStr,
-                replies: []
-            });
+            img.comments.push({ id: Date.now(), user: authorName, text: text, time: timeStr, replies: [] });
             this.state.replyingToId = null;
         }
 
         const { error } = await supabaseClient.from('posts').update({ comments: img.comments }).eq('id', img.id);
 
-        if (error) {
-            alert("Không thể lưu bình luận, vui lòng thử lại!");
-            return;
-        }
+        if (error) { alert("Không thể lưu bình luận, vui lòng thử lại!"); return; }
         
-        this.saveImages(); 
         this.renderComments(img);
         input.value = '';
         
@@ -1438,10 +1320,7 @@ const App = {
         const aiSection = document.getElementById('aiSimilarSection');
         const aiGrid = document.getElementById('aiSimilarGrid');
         
-        if (!aiSection.classList.contains('hidden')) {
-            aiSection.classList.add('hidden');
-            return;
-        }
+        if (!aiSection.classList.contains('hidden')) { aiSection.classList.add('hidden'); return; }
 
         aiSection.classList.remove('hidden');
         aiGrid.innerHTML = '';
@@ -1480,10 +1359,7 @@ const App = {
                 aiGrid.appendChild(card);
             });
         }
-        
-        setTimeout(() => {
-            aiSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }, 100);
+        setTimeout(() => { aiSection.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
     },
 
     switchProfileTab(tabName) {
@@ -1569,27 +1445,21 @@ const App = {
 
         if (!newEmail || !newName) {
             msg.textContent = "Tên và Email không được bỏ trống!";
-            msg.className = "fs-sm fw-bold text-danger";
-            msg.style.display = 'block';
+            msg.className = "fs-sm fw-bold text-danger"; msg.style.display = 'block';
             return;
         }
 
         if (oldPass && oldPass !== this.state.currentUser.password) {
             msg.textContent = "Mật khẩu hiện tại không đúng!";
-            msg.className = "fs-sm fw-bold text-danger";
-            msg.style.display = 'block';
+            msg.className = "fs-sm fw-bold text-danger"; msg.style.display = 'block';
             return;
         }
 
         const saveBtn = document.getElementById('saveSettingsBtn');
         const originalText = saveBtn.textContent;
-        saveBtn.textContent = 'Đang lưu...';
-        saveBtn.disabled = true;
+        saveBtn.textContent = 'Đang lưu...'; saveBtn.disabled = true;
 
-        const updates = { 
-            name: newName, 
-            email: newEmail 
-        };
+        const updates = { name: newName, email: newEmail };
         if (newPass) updates.password = newPass;
         if (this.state.pendingAvatar) updates.avatar = this.state.pendingAvatar;
 
@@ -1597,8 +1467,7 @@ const App = {
 
         if (error) {
             msg.textContent = "Có lỗi xảy ra, không thể lưu!";
-            msg.className = "fs-sm fw-bold text-danger";
-            msg.style.display = 'block';
+            msg.className = "fs-sm fw-bold text-danger"; msg.style.display = 'block';
         } else {
             this.state.currentUser.name = newName;
             this.state.currentUser.email = newEmail;
@@ -1607,23 +1476,17 @@ const App = {
                 this.state.currentUser.avatar = this.state.pendingAvatar;
                 this.state.pendingAvatar = null; 
             }
-
             localStorage.setItem('currentUser', newEmail);
             
             await this.loadData(); 
             this.updateUIWithUser();
 
             msg.textContent = "Lưu cài đặt thành công!";
-            msg.className = "fs-sm fw-bold";
-            msg.style.color = "#10b981";
-            msg.style.display = 'block';
-            
+            msg.className = "fs-sm fw-bold"; msg.style.color = "#10b981"; msg.style.display = 'block';
             document.getElementById('settingOldPass').value = '';
             document.getElementById('settingNewPass').value = '';
         }
-
-        saveBtn.textContent = originalText;
-        saveBtn.disabled = false;
+        saveBtn.textContent = originalText; saveBtn.disabled = false;
     },
 
     setupGlobalAi() {
@@ -1633,14 +1496,9 @@ const App = {
 
         if (openAiBtn) {
             openAiBtn.onclick = (e) => {
-                e.preventDefault();
-                e.stopPropagation();
+                e.preventDefault(); e.stopPropagation();
                 if (messagesPanel) messagesPanel.classList.remove('active'); 
-                
-                if (aiPanel) {
-                    aiPanel.classList.toggle('active');
-                    aiPanel.classList.remove('hidden');
-                }
+                if (aiPanel) { aiPanel.classList.toggle('active'); aiPanel.classList.remove('hidden'); }
             };
         }
 
@@ -1666,18 +1524,11 @@ const App = {
         if (!query) return;
 
         const historyArea = document.getElementById('aiGlobalChatHistory');
-        
-        historyArea.innerHTML += `
-            <div class="chat-bubble sent" style="align-self: flex-end; background: var(--accent-color); color: var(--text-inverse); border-radius: 20px 20px 4px 20px; padding: 10px 16px; max-width: 85%;">
-                ${query}
-            </div>
-        `;
-        input.value = '';
-        historyArea.scrollTop = historyArea.scrollHeight;
+        historyArea.innerHTML += `<div class="chat-bubble sent" style="align-self: flex-end; background: var(--accent-color); color: var(--text-inverse); border-radius: 20px 20px 4px 20px; padding: 10px 16px; max-width: 85%;">${query}</div>`;
+        input.value = ''; historyArea.scrollTop = historyArea.scrollHeight;
 
         setTimeout(() => {
             const lowerQuery = query.toLowerCase();
-            
             const contextDictionary = {
                 "xanh biển": ["biển", "đại dương", "nước", "trời", "blue", "xanh", "phong cảnh", "du lịch"],
                 "xanh lá": ["rừng", "cây", "thảo nguyên", "lá", "thiên nhiên", "green", "cỏ", "phong cảnh", "bò", "động vật"],
@@ -1700,26 +1551,19 @@ const App = {
 
             const stopWords = ['hãy', 'tìm', 'những', 'hình', 'ảnh', 'cho', 'tôi', 'các', 'cái', 'về', 'có', 'màu', 'ngữ', 'cảnh', 'nào'];
             let originalKeywords = lowerQuery.split(' ').filter(word => !stopWords.includes(word) && word.trim().length > 0);
-            
             const searchKeywords = [...new Set([...originalKeywords, ...expandedKeywords])];
 
             let results = this.state.images.filter(img => {
                 const textData = (img.title + " " + (img.desc || "") + " " + img.category).toLowerCase();
-                
                 const exactMatchStr = lowerQuery.replace('tìm ảnh', '').replace('màu', '').trim();
-                if (exactMatchStr.length > 1 && textData.includes(exactMatchStr)) {
-                    img.tempScore = 100; 
-                    return true;
-                }
+                if (exactMatchStr.length > 1 && textData.includes(exactMatchStr)) { img.tempScore = 100; return true; }
                 
                 let matchScore = 0;
                 searchKeywords.forEach(k => {
                     if (k && textData.includes(k)) matchScore += 1;
                     if (k && img.category.toLowerCase().includes(k)) matchScore += 2;
                 });
-
-                img.tempScore = matchScore;
-                return matchScore > 0;
+                img.tempScore = matchScore; return matchScore > 0;
             });
 
             results.sort((a, b) => b.tempScore - a.tempScore);
@@ -1728,7 +1572,6 @@ const App = {
             if (results.length > 0) {
                 aiResponseHtml = `Tôi tìm thấy ${results.length} kết quả liên quan đến yêu cầu của bạn:`;
                 let gridHtml = '<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px;">';
-                
                 results.forEach(img => {
                     gridHtml += `
                         <div style="position: relative; border-radius: 8px; overflow: hidden; cursor: zoom-in;" onclick="App.openDetailModal(${img.id})">
@@ -1737,12 +1580,8 @@ const App = {
                         </div>
                     `;
                 });
-                gridHtml += '</div>';
-                aiResponseHtml += gridHtml;
-                
-                if (results.length > 4) {
-                    aiResponseHtml += `<p class="fs-sm text-muted mt-2 mb-0" style="font-style: italic;">*Còn nhiều kết quả khác ở ngoài trang chủ.</p>`;
-                }
+                gridHtml += '</div>'; aiResponseHtml += gridHtml;
+                if (results.length > 4) aiResponseHtml += `<p class="fs-sm text-muted mt-2 mb-0" style="font-style: italic;">*Còn nhiều kết quả khác ở ngoài trang chủ.</p>`;
             } else {
                 aiResponseHtml = `Xin lỗi bạn, tôi đã quét nhưng không tìm thấy ảnh nào liên quan đến từ khóa/màu sắc này.`;
             }
@@ -1752,7 +1591,6 @@ const App = {
                     ${aiResponseHtml}
                 </div>
             `;
-            
             historyArea.scrollTop = historyArea.scrollHeight;
         }, 800); 
     },
@@ -1763,8 +1601,7 @@ const App = {
             if (!this.profilePage.classList.contains('hidden') || !this.detailModal.classList.contains('hidden')) return;
             if (this.mainWorkspace.scrollTop + this.mainWorkspace.clientHeight >= this.mainWorkspace.scrollHeight - 100) {
                 if (this.state.hasMore && !this.state.isLoadingMore) {
-                    this.state.page++;
-                    this.renderGallery(false);
+                    this.state.page++; this.renderGallery(false);
                 }
             }
         });
@@ -1783,7 +1620,6 @@ const App = {
                 this.state.currentUser.notifications = targetUser.notifications;
                 this.updateNotiBadge();
             }
-            // Bắn thẳng lên Supabase
             await supabaseClient.from('users').update({ notifications: targetUser.notifications }).eq('email', targetEmail);
         }
     },
@@ -1793,11 +1629,8 @@ const App = {
         const badge = document.getElementById('notificationBadge');
         if(badge) {
             if(unread > 0) {
-                badge.textContent = unread > 9 ? '9+' : unread;
-                badge.classList.remove('hidden'); 
-            } else {
-                badge.classList.add('hidden'); 
-            }
+                badge.textContent = unread > 9 ? '9+' : unread; badge.classList.remove('hidden'); 
+            } else badge.classList.add('hidden'); 
         }
     },
 
@@ -1829,9 +1662,7 @@ const App = {
                     if (targetImg) {
                         document.getElementById('notificationsModal').classList.add('hidden'); 
                         this.openDetailModal(targetImg); 
-                    } else {
-                        alert("Ảnh này đã bị xóa hoặc không còn tồn tại!");
-                    }
+                    } else alert("Ảnh này đã bị xóa hoặc không còn tồn tại!");
                 };
             }
 
@@ -1856,7 +1687,6 @@ const App = {
         if (hasUnread) {
             this.state.currentUser.notifications = notis;
             this.updateNotiBadge();
-            // Bắn lên Supabase
             await supabaseClient.from('users').update({ notifications: notis }).eq('email', this.state.currentUser.email);
         }
     },
@@ -1896,7 +1726,6 @@ const App = {
         if (pos > -1) b.ids.splice(pos, 1); else b.ids.push(this.state.imageToSaveId);
 
         this.renderBoardList();
-        
         await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
     },
 
@@ -1910,273 +1739,74 @@ const App = {
         
         nameInput.value = '';
         this.renderBoardList();
-
         await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
     },
-    
-    openImageEditor(src) {
-        if(!this.state.editorImage) this.state.editorImage = new Image();
-        this.state.editorImage.onload = () => {
-            this.resetCanvas();
-            document.getElementById('imageEditorModal').classList.remove('hidden');
-        };
-        this.state.editorImage.src = src;
-    },
-
-    resetCanvas() {
-        const canvas = document.getElementById('imageCanvas');
-        const ctx = canvas.getContext('2d');
-        this.state.drawContext = ctx;
-        this.state.isDrawModeActive = false; 
-        this.state.isCropModeActive = false;
-        
-        const MAX_WIDTH = 1200;
-        let width = this.state.editorImage.width;
-        let height = this.state.editorImage.height;
-        
-        if (width > MAX_WIDTH) {
-            height = (MAX_WIDTH / width) * height;
-            width = MAX_WIDTH;
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(this.state.editorImage, 0, 0, width, height);
-    },
-
-    handleCanvasMouseDown(e) {
-        if (this.state.isDrawModeActive) {
-            this.state.isDrawing = true;
-            this.state.drawContext.beginPath();
-            const rect = e.target.getBoundingClientRect();
-            const scaleX = e.target.width / rect.width;
-            const scaleY = e.target.height / rect.height;
-            this.state.lastX = (e.clientX - rect.left) * scaleX;
-            this.state.lastY = (e.clientY - rect.top) * scaleY;
-            return;
-        }
-        
-        if (this.state.isCropModeActive) {
-            this.state.isDraggingCrop = true;
-            const rect = e.target.getBoundingClientRect();
-            this.state.cropStartX = e.clientX - rect.left;
-            this.state.cropStartY = e.clientY - rect.top;
-
-            const selection = document.getElementById('cropSelection');
-            selection.style.left = this.state.cropStartX + 'px';
-            selection.style.top = this.state.cropStartY + 'px';
-            selection.style.width = '0px';
-            selection.style.height = '0px';
-            selection.classList.remove('hidden');
-        }
-    },
-
-    handleCanvasMouseMove(e) {
-        if (this.state.isDrawModeActive && this.state.isDrawing) {
-            const canvas = document.getElementById('imageCanvas');
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            
-            const x = (e.clientX - rect.left) * scaleX;
-            const y = (e.clientY - rect.top) * scaleY;
-            
-            const ctx = this.state.drawContext;
-            ctx.lineWidth = document.getElementById('brushSize').value;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = document.getElementById('brushColor').value;
-            
-            ctx.moveTo(this.state.lastX, this.state.lastY);
-            ctx.lineTo(x, y);
-            ctx.stroke(); 
-            
-            this.state.lastX = x;
-            this.state.lastY = y;
-            return;
-        }
-
-        if (this.state.isCropModeActive && this.state.isDraggingCrop) {
-            const rect = e.target.getBoundingClientRect();
-            let currentX = e.clientX - rect.left;
-            let currentY = e.clientY - rect.top;
-
-            currentX = Math.max(0, Math.min(currentX, rect.width));
-            currentY = Math.max(0, Math.min(currentY, rect.height));
-
-            const x = Math.min(this.state.cropStartX, currentX);
-            const y = Math.min(this.state.cropStartY, currentY);
-            const w = Math.abs(currentX - this.state.cropStartX);
-            const h = Math.abs(currentY - this.state.cropStartY);
-
-            const selection = document.getElementById('cropSelection');
-            selection.style.left = x + 'px';
-            selection.style.top = y + 'px';
-            selection.style.width = w + 'px';
-            selection.style.height = h + 'px';
-        }
-    },
-
-    handleCanvasMouseUp(e) {
-        if (this.state.isDrawModeActive && this.state.isDrawing) {
-            this.state.isDrawing = false;
-            this.state.drawContext.closePath();
-            return;
-        }
-
-        if (this.state.isCropModeActive && this.state.isDraggingCrop) {
-            this.state.isDraggingCrop = false;
-            const selection = document.getElementById('cropSelection');
-            selection.classList.add('hidden');
-
-            const canvas = document.getElementById('imageCanvas');
-            const rect = canvas.getBoundingClientRect();
-
-            const domW = parseFloat(selection.style.width);
-            const domH = parseFloat(selection.style.height);
-
-            if (domW > 20 && domH > 20) {
-                const domX = parseFloat(selection.style.left);
-                const domY = parseFloat(selection.style.top);
-
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-
-                this.executeFreeCrop(domX * scaleX, domY * scaleY, domW * scaleX, domH * scaleY);
-            }
-            
-            document.getElementById('freeCropBtn').click();
-        }
-    },
-
-    executeFreeCrop(x, y, w, h) {
-        const canvas = document.getElementById('imageCanvas');
-        const ctx = canvas.getContext('2d');
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = w;
-        tempCanvas.height = h;
-        tempCanvas.getContext('2d').drawImage(canvas, x, y, w, h, 0, 0, w, h);
-        
-        canvas.width = w;
-        canvas.height = h;
-        ctx.drawImage(tempCanvas, 0, 0);
-    },
-
-    saveEditedImage() {
-        const canvas = document.getElementById('imageCanvas');
-        const finalDataUrl = canvas.toDataURL('image/webp', 0.8); 
-        
-        const img = document.getElementById('uploadPreviewImg');
-        const placeholder = document.getElementById('uploadPlaceholder');
-        
-        if (img) {
-            img.src = finalDataUrl;
-            img.classList.remove('hidden');
-            img.style.display = 'block'; 
-        }
-        if (placeholder) {
-            placeholder.classList.add('hidden');
-            placeholder.style.display = 'none';
-        }
-        
-        const modal = document.getElementById('imageEditorModal');
-        if (modal) modal.classList.add('hidden');
-    },
-
-    async toggleFollow() {
-        const img = this.state.images.find(i => i.id === this.state.activeImageId);
-        if(!img || !this.state.currentUser) return;
-
-        const targetEmail = img.owner;
-        const myEmail = this.state.currentUser.email;
-
-        if (targetEmail === myEmail) return;
-
-        const targetUser = this.state.allUsers.find(u => u.email === targetEmail);
-        if (!targetUser) return;
-
-        if (!this.state.currentUser.following) this.state.currentUser.following = [];
-        if (!targetUser.followers) targetUser.followers = [];
-
-        const isFollowing = this.state.currentUser.following.includes(targetEmail);
-        const followBtn = document.getElementById('followBtn');
-
-        if (isFollowing) {
-            this.state.currentUser.following = this.state.currentUser.following.filter(e => e !== targetEmail);
-            targetUser.followers = targetUser.followers.filter(e => e !== myEmail);
-            if(followBtn) { followBtn.textContent = 'Theo dõi'; followBtn.className = 'btn-primary rounded-pill'; }
-        } else {
-            this.state.currentUser.following.push(targetEmail);
-            targetUser.followers.push(myEmail);
-            if(followBtn) { followBtn.textContent = 'Đang theo dõi'; followBtn.className = 'btn-outline rounded-pill'; }
-        }
-
-        this.updateUIWithUser();
-        
-        // Cập nhật Supabase cho cả 2 người
-        await supabaseClient.from('users').update({ following: this.state.currentUser.following }).eq('email', myEmail);
-        await supabaseClient.from('users').update({ followers: targetUser.followers }).eq('email', targetEmail);
-
-        if (!isFollowing) this.pushNotification(targetEmail, `👤 ${this.state.currentUser.name} đã bắt đầu theo dõi bạn.`);
-    },    
     
     playSound() {
         const audio = new Audio('https://actions.google.com/sounds/v1/ui/message_notification.ogg');
         audio.play().catch(() => console.log("Trình duyệt tạm thời chặn âm báo động"));
     },
 
+    // ==========================================
+    // TRÁI TIM CỦA ỨNG DỤNG - RADAR QUÉT REAL-TIME
+    // ==========================================
     async pollForUpdates() {
         if (!this.state.currentUser) return;
         let shouldPlaySound = false;
 
         try {
-            // 1. QUÉT THÔNG BÁO TỪ SUPABASE
-            const { data } = await supabaseClient
-                .from('users')
-                .select('notifications')
-                .eq('email', this.state.currentUser.email)
-                .single();
+            // Tải thông báo mới nhất từ Supabase
+            const { data } = await supabaseClient.from('users').select('notifications').eq('email', this.state.currentUser.email).single();
 
-            if (data) {
+            if (data && data.notifications) {
+                let notis = data.notifications;
+                
+                // 1. TÁCH TIN NHẮN CHAT ẨN DANH VÀ THÔNG BÁO CHUÔNG
+                const chatMsgs = notis.filter(n => n.type === 'chat_msg');
+                const standardNotis = notis.filter(n => n.type !== 'chat_msg');
+
+                if (chatMsgs.length > 0) {
+                    shouldPlaySound = true;
+                    let chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
+                    
+                    chatMsgs.forEach(msg => {
+                        let chat = chats.find(c => c.participants.includes(this.state.currentUser.email) && c.participants.includes(msg.sender));
+                        if (!chat) {
+                            chat = { id: Date.now() + Math.floor(Math.random()*1000), participants: [this.state.currentUser.email, msg.sender], messages: [] };
+                            chats.push(chat);
+                        }
+                        chat.messages.push({ sender: msg.sender, text: msg.text, time: msg.time });
+                        chat.unreadFor = [this.state.currentUser.email];
+                    });
+
+                    // Cập nhật lại UI Chat
+                    localStorage.setItem('conversationsData', JSON.stringify(chats));
+                    this.state.conversations = chats;
+                    this.updateChatBadge();
+
+                    const msgPanel = document.getElementById('messagesPanel');
+                    if (msgPanel && msgPanel.classList.contains('active')) {
+                        if(typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
+                        if(typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
+                    }
+
+                    // Tự dọn dẹp các "gói tin nhắn ẩn" trên Supabase sau khi đã nhận
+                    await supabaseClient.from('users').update({ notifications: standardNotis }).eq('email', this.state.currentUser.email);
+                }
+
+                // 2. XỬ LÝ THÔNG BÁO CHUÔNG BÌNH THƯỜNG
                 const currentUnread = (this.state.currentUser.notifications || []).filter(n => !n.read).length;
-                const newUnread = (data.notifications || []).filter(n => !n.read).length;
+                const newUnread = standardNotis.filter(n => !n.read).length;
                 
                 if (newUnread > currentUnread) shouldPlaySound = true;
                 
-                this.state.currentUser.notifications = data.notifications || [];
+                this.state.currentUser.notifications = standardNotis;
                 this.updateNotiBadge();
             }
 
-            // 2. QUÉT TIN NHẮN CHAT (Bằng localStorage cho nhẹ server)
-            const chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
-            const myChats = chats.filter(c => c.participants.includes(this.state.currentUser.email));
-            
-            const currentUnreadChats = (this.state.conversations || []).filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
-            const newUnreadChats = myChats.filter(c => c.unreadFor && c.unreadFor.includes(this.state.currentUser.email)).length;
-
-            if (newUnreadChats > currentUnreadChats) {
-                shouldPlaySound = true;
-                const msgPanel = document.getElementById('messagesPanel');
-                if (msgPanel && msgPanel.classList.contains('active')) {
-                    this.state.conversations = chats;
-                    if(typeof this.renderChatListGlobal === 'function') this.renderChatListGlobal();
-                    
-                    if (this.state.activeChatId) {
-                        const activeChat = chats.find(c => c.id === this.state.activeChatId);
-                        if (activeChat && activeChat.unreadFor && activeChat.unreadFor.includes(this.state.currentUser.email)) {
-                            activeChat.unreadFor = activeChat.unreadFor.filter(e => e !== this.state.currentUser.email);
-                            localStorage.setItem('conversationsData', JSON.stringify(chats));
-                            if(typeof this.renderMessagesGlobal === 'function') this.renderMessagesGlobal();
-                        }
-                    }
-                }
-            }
-            this.state.conversations = chats;
-            this.updateChatBadge();
-
             if (shouldPlaySound) this.playSound();
-        } catch (error) {
-            console.log("Lỗi radar:", error);
+        } catch (error) { 
+            console.log("Radar lỗi:", error); 
         }
     },
     
@@ -2187,12 +1817,8 @@ const App = {
         
         const badge = document.getElementById('chatBadge');
         if(badge) {
-            if(unreadCount > 0) {
-                badge.textContent = unreadCount > 9 ? '9+' : unreadCount;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
+            if(unreadCount > 0) { badge.textContent = unreadCount > 9 ? '9+' : unreadCount; badge.classList.remove('hidden'); } 
+            else badge.classList.add('hidden');
         }
     },
 };

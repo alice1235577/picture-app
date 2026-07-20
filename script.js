@@ -1330,7 +1330,7 @@ async saveNewIdea() {
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Đăng ý tưởng'; }
         }
     },    
-    openDetailModal(item) {
+openDetailModal(item) {
         this.state.activeImageId = item.id;
         this.state.replyingToId = null; 
         
@@ -1351,7 +1351,10 @@ async saveNewIdea() {
         const moreBtn = document.getElementById('moreOptionsBtn');
         if (moreBtn) moreBtn.parentElement.classList.toggle('hidden', !isOwner);
 
-        const isLiked = (item.likedBy || []).includes(this.state.currentUser.email);
+        // ĐÃ SỬA LỖI: Đồng bộ đúng tên biến liked_by từ Supabase
+        const currentLikedBy = item.liked_by || item.likedBy || [];
+        const isLiked = currentLikedBy.includes(this.state.currentUser.email);
+        
         document.getElementById('likeBtn').innerHTML = `${isLiked ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${item.likes || 0}</span>`;
 
         const isSaved = (this.state.currentUser.savedIds || []).includes(item.id);
@@ -1376,7 +1379,6 @@ async saveNewIdea() {
         this.renderComments(item);
         this.detailModal.classList.remove('hidden');
     },
-
     async deleteIdea() {
         if(confirm("Bạn có chắc chắn muốn xóa bài viết này không?")) {
             const { error } = await supabaseClient.from('posts').delete().eq('id', this.state.activeImageId);
@@ -1442,50 +1444,53 @@ async toggleLikeDetail() {
         if (!img || !this.state.currentUser) return;
 
         const myEmail = this.state.currentUser.email;
-        // Đảm bảo likedBy là một mảng
-        let likedBy = Array.isArray(img.likedBy) ? img.likedBy : [];
-        const isCurrentlyLiked = likedBy.includes(myEmail);
+        
+        // ĐÃ SỬA LỖI: Kéo đúng danh sách Tim từ Supabase, không bị ghi đè nữa
+        let currentLikedBy = img.liked_by || img.likedBy || [];
+        if (!Array.isArray(currentLikedBy)) currentLikedBy = [];
 
-        // 1. CẬP NHẬT GIAO DIỆN TỨC THÌ (Instant UI Update)
+        const isCurrentlyLiked = currentLikedBy.includes(myEmail);
+
         const likeBtn = document.getElementById('likeBtn');
         const likeCountTxt = document.getElementById('likeCountTxt');
         
         let newLikeStatus = !isCurrentlyLiked;
         if (newLikeStatus) {
-            // Người dùng vừa mới Like
-            likedBy.push(myEmail);
+            // Vừa mới thả tim
+            currentLikedBy.push(myEmail);
             img.likes = (img.likes || 0) + 1;
         } else {
-            // Người dùng vừa bỏ Like
-            likedBy = likedBy.filter(email => email !== myEmail);
+            // Vừa bấm hủy tim
+            currentLikedBy = currentLikedBy.filter(email => email !== myEmail);
             img.likes = Math.max(0, (img.likes || 1) - 1);
         }
 
-        // Cập nhật lên State
-        img.likedBy = likedBy;
+        // Đồng bộ dữ liệu cục bộ
+        img.liked_by = currentLikedBy;
+        img.likedBy = currentLikedBy;
         
-        // Cập nhật giao diện
+        // Cập nhật giao diện (Màu tim và con số nhảy ngay lập tức)
         likeBtn.innerHTML = `${newLikeStatus ? '❤️' : '🤍'} <span id="likeCountTxt" class="fs-sm fw-bold ms-1">${img.likes}</span>`;
 
-        // 2. CẬP NHẬT LÊN DATABASE (Supabase)
+        // Bắn dữ liệu chuẩn xác lên Supabase
         await supabaseClient
             .from('posts')
             .update({ 
                 likes: img.likes, 
-                liked_by: likedBy 
+                liked_by: currentLikedBy 
             })
             .eq('id', img.id);
 
-        // 3. GỬI THÔNG BÁO (Chỉ gửi khi là Like mới và không tự tim cho mình)
+        // Chỉ gửi thông báo nếu là thả tim (Không gửi khi hủy)
         if (newLikeStatus && img.owner !== myEmail) {
             const myName = this.state.currentUser.name || myEmail.split('@')[0];
             const message = `❤️ ${myName} đã thích ảnh của bạn!`;
             this.pushNotification(img.owner, message, img.id);
         }
         
-        // Cập nhật lại gallery để thay đổi đồng bộ bên ngoài
         this.renderGallery(); 
-    },    
+    },
+    
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';

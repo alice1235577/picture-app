@@ -466,7 +466,7 @@ const App = {
             chatDetailView.classList.remove('hidden');
         };
 
-        const renderMessages = () => {
+const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
             const chat = App.state.conversations.find(c => c.id === App.state.activeChatId);
@@ -476,34 +476,36 @@ const App = {
                 const isMe = msg.sender === App.state.currentUser.email;
                 const bubble = document.createElement('div');
                 bubble.className = `chat-bubble ${isMe ? 'sent' : 'received'}`;
-                bubble.textContent = msg.text;
+                
+                // 1. Tạo phần chứa nội dung chữ
+                const textDiv = document.createElement('div');
+                textDiv.style.wordBreak = 'break-word';
+                textDiv.textContent = msg.text;
+                bubble.appendChild(textDiv);
+
+                // 2. Tạo phần hiển thị thời gian (Giờ:Phút - Ngày/Tháng)
+                if (msg.time) {
+                    const dateObj = new Date(msg.time);
+                    // Định dạng chuẩn Việt Nam: VD "14:30 - 20/07"
+                    const timeString = dateObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+                    
+                    const timeDiv = document.createElement('div');
+                    timeDiv.style.fontSize = '10.5px';
+                    timeDiv.style.opacity = '0.6';
+                    timeDiv.style.marginTop = '6px';
+                    // Căn phải nếu là tin mình gửi, căn trái nếu là người khác gửi
+                    timeDiv.style.textAlign = isMe ? 'right' : 'left'; 
+                    timeDiv.textContent = timeString;
+                    
+                    bubble.appendChild(timeDiv);
+                }
+
                 area.appendChild(bubble);
             });
             area.scrollTop = area.scrollHeight; 
         };
-        this.renderMessagesGlobal = renderMessages; 
-
-        const newMessageView = document.getElementById('newMessageView');
-        let selectedUserForChat = null;
-
-        document.getElementById('newMessageBtn')?.addEventListener('click', () => {
-            if (!App.state.currentUser) return;
-            document.getElementById('chatListView').classList.add('hidden');
-            if(newMessageView) newMessageView.classList.remove('hidden');
-            
-            const searchInput = document.getElementById('searchUserInput');
-            if(searchInput) searchInput.value = '';
-            selectedUserForChat = null;
-            
-            const nextBtn = document.getElementById('nextNewMessageBtn');
-            if (nextBtn) {
-                nextBtn.style.background = 'var(--bg-hover)';
-                nextBtn.style.color = 'var(--text-secondary)';
-                nextBtn.style.pointerEvents = 'none';
-            }
-            renderSuggestedUsers(''); 
-        });
-
+        this.renderMessagesGlobal = renderMessages;
+        
         document.getElementById('backFromNewMessageBtn')?.addEventListener('click', () => {
             if(newMessageView) newMessageView.classList.add('hidden');
             document.getElementById('chatListView').classList.remove('hidden');

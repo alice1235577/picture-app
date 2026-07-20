@@ -267,31 +267,26 @@ const App = {
             if (!searchInput.contains(e.target) && !searchDropdown.contains(e.target)) searchDropdown.classList.add('hidden');
         });
 
-// =======================================================
+        // =======================================================
         // XỬ LÝ UPLOAD & CÁC NÚT CỦA BẢNG MINI PHOTOSHOP
         // =======================================================
-// =======================================================
-        // 1. CÁC NÚT ĐIỀU KHIỂN BẢNG PHOTOSHOP MINI
-        // =======================================================
-        const fileInput = document.getElementById('uploadFileInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        if (typeof App.openImageEditor === 'function') {
-                            App.openImageEditor(ev.target.result); 
-                        } else {
-                            alert("Lỗi: Không tìm thấy hệ thống xử lý ảnh!");
-                        }
-                        e.target.value = ''; 
-                    };
-                    reader.readAsDataURL(file);
-                }
-            });
-        }
-        
+    const fileInput = document.getElementById('uploadFileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Tự động nén ảnh về chiều rộng tối đa 1200px và chất lượng 60% ngay khi vừa chọn file
+                App.compressImage(file, 1200, 0.6).then(compressedBase64 => {
+                    if (typeof App.openImageEditor === 'function') {
+                        App.openImageEditor(compressedBase64); 
+                    } else {
+                        alert("Lỗi: Không tìm thấy hệ thống xử lý ảnh!");
+                    }
+                    e.target.value = ''; 
+                });
+            }
+        });
+    }        
         document.getElementById('cancelEditorBtn')?.addEventListener('click', () => document.getElementById('imageEditorModal').classList.add('hidden'));
         document.getElementById('saveEditorBtn')?.addEventListener('click', () => App.saveEditedImage());
         
@@ -505,7 +500,7 @@ const renderMessages = () => {
             area.scrollTop = area.scrollHeight; 
         };
         this.renderMessagesGlobal = renderMessages;
-        
+
         document.getElementById('backFromNewMessageBtn')?.addEventListener('click', () => {
             if(newMessageView) newMessageView.classList.add('hidden');
             document.getElementById('chatListView').classList.remove('hidden');
@@ -1242,7 +1237,7 @@ const renderMessages = () => {
 
     saveEditedImage() {
         const canvas = document.getElementById('imageCanvas');
-        const finalDataUrl = canvas.toDataURL('image/webp', 0.8); 
+        const finalDataUrl = canvas.toDataURL('image/webp', 0.5); 
         
         const img = document.getElementById('uploadPreviewImg');
         const placeholder = document.getElementById('uploadPlaceholder');

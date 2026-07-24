@@ -2,6 +2,20 @@ Object.assign(window.App, {
 setupGlobalAi() {
         const aiPanel = document.getElementById('aiPanel');
         const floatingAiBtn = document.getElementById('floatingAiBtn'); 
+        const historyArea = document.getElementById('aiGlobalChatHistory');
+        
+        // --- 1. TẢI LỊCH SỬ TỪ BỘ NHỚ TRÌNH DUYỆT ---
+        let aiMemory = JSON.parse(localStorage.getItem('ai_chat_memory')) || [];
+        
+        // Vẽ lại các tin nhắn cũ ra màn hình
+        aiMemory.forEach(msg => {
+            if (msg.role === 'user') {
+                historyArea.innerHTML += `<div class="chat-bubble sent" style="align-self: flex-end; background: var(--accent-color); color: var(--text-inverse); border-radius: 20px 20px 4px 20px; padding: 10px 16px; max-width: 85%; margin-bottom: 12px;">${msg.content}</div>`;
+            } else if (msg.role === 'assistant') {
+                historyArea.innerHTML += `<div class="chat-bubble received shadow-large" style="align-self: flex-start; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 20px 20px 20px 4px; padding: 12px 16px; max-width: 90%; margin-bottom: 12px;">${msg.content.replace(/\n/g, '<br>')}</div>`;
+            }
+        });
+        if (historyArea) historyArea.scrollTop = historyArea.scrollHeight;
 
         // --- HỆ THỐNG KÉO THẢ MƯỢT MÀ ---
         let isDragging = false;
@@ -111,36 +125,48 @@ setupGlobalAi() {
         `;
         historyArea.scrollTop = historyArea.scrollHeight;
 
-        try {
-            const GROQ_API_KEY = "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"; 
+try {
+            // 1. Lấy lại bộ nhớ hiện tại
+            let aiMemory = JSON.parse(localStorage.getItem('ai_chat_memory')) || [];
             
+            // 2. Thêm câu hỏi mới của User vào bộ nhớ
+            aiMemory.push({ "role": "user", "content": query });
+            
+            // Chỉ giữ lại khoảng 10 tin nhắn gần nhất để AI không bị quá tải bộ nhớ
+            if (aiMemory.length > 10) aiMemory = aiMemory.slice(aiMemory.length - 10);
+
+            // 3. Chuẩn bị dữ liệu gửi đi (Bao gồm Prompt cài đặt gốc + Lịch sử chat)
+            let messagesToSend = [
+                { 
+                    "role": "system", 
+                    "content": "Bạn là trợ lý ảo siêu thông minh. Hãy trả lời cực kỳ chính xác, ngắn gọn, thân thiện, xưng 'mình' và gọi người dùng là 'bạn'." 
+                },
+                ...aiMemory // Gắn toàn bộ trí nhớ vào đây
+            ];
+
+            // 4. Gọi API Groq
             const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${GROQ_API_KEY}`,
+                    "Authorization": `Bearer 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`,
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
                     "model": "llama-3.3-70b-versatile",
-                    "messages": [
-                    { 
-                        "role": "system", 
-                        "content": "Bạn là Trấn Thành/Google tích hợp vào mạng xã hội Picture. Hãy trả lời cực kỳ chính xác, thông minh, không được bịa đặt sai sự thật về người nổi tiếng. Luôn trả lời ngắn gọn, thân thiện, xưng 'mình' và gọi người dùng là 'bạn'. Trả lời hoàn toàn bằng tiếng Việt tự nhiên, tuyệt đối không dịch bồi nửa Anh nửa Việt." 
-                    },
-                    { "role": "user", "content": query }
-                ]
-            
-            })
+                    "messages": messagesToSend
+                })
             });
 
             const data = await response.json();
-            console.log("Dữ liệu Groq trả về:", data); 
-
-            let aiTextAnswer = "Xin lỗi, hệ thống AI đang quá tải. Bạn chờ chút rồi thử lại nhé!";
+            
+            let aiTextAnswer = "Xin lỗi, hệ thống AI đang bận!";
             if (data && data.choices && data.choices[0].message) {
                 aiTextAnswer = data.choices[0].message.content;
+                
+                // 5. Lưu câu trả lời của AI vào bộ nhớ
+                aiMemory.push({ "role": "assistant", "content": aiTextAnswer });
+                localStorage.setItem('ai_chat_memory', JSON.stringify(aiMemory)); // Cập nhật lại trình duyệt
             }
-
             const lowerQuery = query.toLowerCase();
             const contextDictionary = {
                 "xanh biển": ["biển", "đại dương", "nước", "trời", "blue", "xanh", "phong cảnh", "du lịch"],

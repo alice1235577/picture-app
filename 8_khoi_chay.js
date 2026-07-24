@@ -115,6 +115,8 @@ Object.assign(window.App, {
             document.getElementById('headerWrapper').classList.add('hidden'); 
             this.profilePage.classList.remove('hidden'); 
             this.switchProfileTab('created'); 
+            // Thêm renderProfileBoards vào sự kiện mở profile
+            renderProfileBoards();
         });
 
         document.getElementById('closeProfileBtn')?.addEventListener('click', () => {
@@ -439,7 +441,26 @@ Object.assign(window.App, {
             if(newMessageView) newMessageView.classList.add('hidden');
             document.getElementById('chatListView').classList.remove('hidden');
         });
-
+        // Bắt sự kiện khi click vào nút "Tin nhắn mới"
+        document.getElementById('newMessageBtn')?.addEventListener('click', () => {
+            // Ẩn danh sách tin nhắn hiện tại
+            const chatListView = document.getElementById('chatListView');
+            if (chatListView) {
+                chatListView.classList.add('hidden');
+            }
+            
+            // Hiển thị giao diện tìm kiếm/tạo tin nhắn mới
+            const newMessageView = document.getElementById('newMessageView');
+            if (newMessageView) {
+                newMessageView.classList.remove('hidden');
+            }
+            
+            // Tự động focus con trỏ chuột vào ô tìm kiếm người dùng
+            const searchInput = document.getElementById('searchUserInput');
+            if (searchInput) {
+                searchInput.focus();
+            }
+        });
         let selectedUserForChat = null;
         const renderSuggestedUsers = (searchQuery = '') => {
             const listEl = document.getElementById('suggestedUsersList');
@@ -675,6 +696,317 @@ Object.assign(window.App, {
         document.getElementById('saveSettingsBtn')?.addEventListener('click', () => this.saveSettings());
         
         this.setupGlobalAi();
+
+        // --- LOGIC CHO MODAL DANH SÁCH THEO DÕI ---
+        const openFollowStatsBtn = document.getElementById('openFollowStatsBtn');
+        const followStatsModal = document.getElementById('followStatsModal');
+        const closeFollowStatsBtn = document.getElementById('closeFollowStatsBtn');
+        const tabFollowers = document.getElementById('tabFollowers');
+        const tabFollowing = document.getElementById('tabFollowing');
+        const followStatsContent = document.getElementById('followStatsContent');
+
+        // Mở modal khi bấm vào dòng "X người theo dõi..."
+        if (openFollowStatsBtn) {
+            openFollowStatsBtn.addEventListener('click', () => {
+                followStatsModal.classList.remove('hidden');
+                renderFollowStatsList('followers'); // Mặc định mở tab Người theo dõi
+            });
+        }
+
+// Bắt sự kiện click toàn cục an toàn (Event Delegation)
+        document.addEventListener('click', (e) => {
+            
+            // 1. XỬ LÝ KHI CLICK MỞ HỘP THOẠI THEO DÕI
+            const clickedFollowStatsBtn = e.target.closest('#openFollowStatsBtn') || e.target.closest('.profile-header-card p.text-muted.mt-2');
+            if (clickedFollowStatsBtn) {
+                const followStatsModal = document.getElementById('followStatsModal');
+                if (followStatsModal) {
+                    followStatsModal.classList.remove('hidden');
+                    
+                    // Đưa UI về trạng thái mặc định: Luôn làm sáng tab "Người theo dõi"
+                    const tabFollowers = document.getElementById('tabFollowers');
+                    const tabFollowing = document.getElementById('tabFollowing');
+                    if (tabFollowers && tabFollowing) {
+                        tabFollowers.classList.add('active');
+                        tabFollowing.classList.remove('active');
+                    }
+                    
+                    // Render danh sách "Người theo dõi"
+                    if (typeof renderFollowStatsList === 'function') {
+                        renderFollowStatsList('followers'); 
+                    }
+                }
+            }
+
+            // 2. XỬ LÝ KHI CLICK NÚT ĐÓNG (✕)
+            const clickedCloseBtn = e.target.closest('#closeFollowStatsBtn');
+            if (clickedCloseBtn) {
+                const followStatsModal = document.getElementById('followStatsModal');
+                if (followStatsModal) {
+                    followStatsModal.classList.add('hidden');
+                }
+            }
+            
+        });
+        window.addEventListener('click', (e) => {
+            if (e.target === followStatsModal) followStatsModal.classList.add('hidden');
+        });
+
+        // Xử lý chuyển đổi Tab
+        tabFollowers?.addEventListener('click', () => {
+            tabFollowers.classList.add('active');
+            tabFollowing.classList.remove('active');
+            renderFollowStatsList('followers');
+        });
+
+        tabFollowing?.addEventListener('click', () => {
+            tabFollowing.classList.add('active');
+            tabFollowers.classList.remove('active');
+            renderFollowStatsList('following');
+        });
+
+        // Hàm Render danh sách người dùng
+        function renderFollowStatsList(type) {
+            if (!followStatsContent) return;
+            followStatsContent.innerHTML = '';
+            
+            // Lấy thông tin user hiện tại (thay đổi tùy theo cấu trúc state của bạn)
+            const currentUser = window.App.state.currentUser;
+            if (!currentUser) return;
+            
+            // Giả định mảng lưu trữ email những người theo dõi trong state
+            const listToRender = type === 'followers' ? (currentUser.followers || []) : (currentUser.following || []);
+            
+            if (listToRender.length === 0) {
+                followStatsContent.innerHTML = `<p class="text-muted text-center mt-4 fs-sm">Chưa có ai ở đây cả.</p>`;
+                return;
+            }
+
+            // Đổ dữ liệu ra danh sách
+            listToRender.forEach(email => {
+                // Sử dụng hàm lấy thông tin user (nếu chưa có hàm này, hãy fallback hiển thị email)
+                const user = (typeof window.App.getUserFromEmail === 'function') 
+                    ? window.App.getUserFromEmail(email) 
+                    : { name: email.split('@')[0], avatar: null, email: email };
+                
+                const item = document.createElement('div');
+                item.className = 'chat-item flex-align-center gap-3 bg-surface shadow-sm';
+                item.style.padding = '10px 12px';
+                item.style.borderRadius = '12px';
+                item.style.cursor = 'pointer';
+                
+                let avatarHtml = `<div class="avatar-circle bg-accent text-inverse" style="width: 44px; height: 44px; flex-shrink: 0;">${user.name.charAt(0).toUpperCase()}</div>`;
+                if (user.avatar) {
+                    avatarHtml = `<div class="avatar-circle" style="width: 44px; height: 44px; flex-shrink: 0;"><img src="${user.avatar}" style="width:100%;height:100%;object-fit:cover;"></div>`;
+                }
+
+                item.innerHTML = `
+                    ${avatarHtml}
+                    <div style="flex: 1; overflow: hidden;">
+                        <strong class="text-primary fs-md d-block notranslate text-truncate">${user.name}</strong>
+                        <span class="text-muted fs-sm notranslate text-truncate">@${user.email.split('@')[0]}</span>
+                    </div>
+                `;
+                
+                // (Tùy chọn) Có thể gắn thêm sự kiện click vào item này để xem trang cá nhân của họ
+                item.onclick = () => {
+                    console.log("Xem trang cá nhân của:", user.email);
+                    // followStatsModal.classList.add('hidden');
+                    // navigateToProfile(user.email);
+                };
+                
+                followStatsContent.appendChild(item);
+            });
+        }
+        
+        // --- LOGIC CHO TÍNH NĂNG TẠO BẢNG & HIỂN THỊ CHI TIẾT BẢNG ---
+
+        const getBoards = () => JSON.parse(localStorage.getItem('userBoards') || '[]');
+        const saveBoards = (boards) => localStorage.setItem('userBoards', JSON.stringify(boards));
+        
+        // Lấy danh sách nội dung (các link ảnh) của từng bảng
+        const getBoardContents = () => JSON.parse(localStorage.getItem('boardContents') || '{}');
+        const saveBoardContents = (contents) => localStorage.setItem('boardContents', JSON.stringify(contents));
+
+const renderProfileBoards = () => {
+            const boardItemsContainer = document.getElementById('profileBoardItems');
+            if (!boardItemsContainer) return;
+            
+            boardItemsContainer.innerHTML = '';
+            const boards = getBoards();
+            const contents = getBoardContents();
+            
+            if (boards.length === 0) {
+                boardItemsContainer.innerHTML = '<p class="text-muted fs-sm">Bạn chưa tạo bảng nào.</p>';
+                return;
+            }
+
+            boards.forEach(boardName => {
+                const boardImages = contents[boardName] || [];
+                // Bỏ chữ "Trống" trên ảnh bìa mặc định để tránh lỗi ngôn ngữ
+                const coverImgSrc = boardImages.length > 0 ? boardImages[0] : 'https://placehold.co/300x300/e0e0e0/a0a0a0';
+
+                const boardDiv = document.createElement('div');
+                boardDiv.style.display = 'flex';
+                boardDiv.style.flexDirection = 'column';
+                boardDiv.style.gap = '8px';
+                boardDiv.style.width = '160px';
+                boardDiv.style.cursor = 'pointer';
+                boardDiv.style.transition = 'transform 0.2s ease';
+                
+                boardDiv.onmouseenter = () => boardDiv.style.transform = 'scale(1.03)';
+                boardDiv.onmouseleave = () => boardDiv.style.transform = 'scale(1)';
+                
+                // ĐÃ XÓA class "notranslate" ở thẻ strong bên dưới
+                boardDiv.innerHTML = `
+                    <div style="width: 100%; height: 160px; border-radius: 16px; overflow: hidden; background-color: var(--bg-hover); border: 1px solid var(--border-color);">
+                        <img src="${coverImgSrc}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.9;" alt="Bìa bảng">
+                    </div>
+                    <strong class="text-primary" style="font-size: 15px; padding-left: 4px;">${boardName}</strong>
+                `;
+                
+                // MỞ MODAL CHI TIẾT KHI CLICK VÀO BẢNG
+                boardDiv.onclick = () => {
+                    const detailModal = document.getElementById('boardDetailModal');
+                    document.getElementById('boardDetailTitle').textContent = boardName;
+                    const grid = document.getElementById('boardDetailGrid');
+                    const emptyState = document.getElementById('boardDetailEmpty');
+                    
+                    grid.innerHTML = '';
+                    const images = getBoardContents()[boardName] || [];
+                    
+                    if (images.length === 0) {
+                        emptyState.classList.remove('hidden');
+                    } else {
+                        emptyState.classList.add('hidden');
+                        images.forEach(imgSrc => {
+                            const imgEl = document.createElement('img');
+                            imgEl.src = imgSrc;
+                            imgEl.style.width = '100%';
+                            imgEl.style.borderRadius = '16px';
+                            imgEl.style.marginBottom = '16px';
+                            imgEl.style.cursor = 'zoom-in';
+                            
+                            // Bấm vào ảnh trong bảng để xem kích thước lớn
+                            imgEl.onclick = () => {
+                                // 1. Mở hộp thoại chi tiết ảnh
+                                document.getElementById('detailImg').src = imgSrc;
+                                document.getElementById('detailModal').classList.remove('hidden');
+                                
+                                // 2. Đóng hộp thoại danh sách ảnh trong bảng đi
+                                document.getElementById('boardDetailModal').classList.add('hidden');
+                            };                            
+                            grid.appendChild(imgEl);
+                        });
+                    }
+                    detailModal.classList.remove('hidden');
+                };
+
+                boardItemsContainer.appendChild(boardDiv);
+            });
+        };
+        // Đóng Hộp thoại chi tiết bảng
+        document.getElementById('closeBoardDetailBtn')?.addEventListener('click', () => {
+            document.getElementById('boardDetailModal').classList.add('hidden');
+        });
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('boardDetailModal');
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        // HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
+// HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
+        const renderBoardList = () => {
+            const boardList = document.getElementById('boardList');
+            if (!boardList) return;
+            boardList.innerHTML = '';
+            
+            getBoards().forEach(boardName => {
+                const boardItem = document.createElement('div');
+                boardItem.className = 'flex-align-center bg-hover shadow-sm mt-2';
+                boardItem.style.padding = '12px 16px';
+                boardItem.style.borderRadius = '12px';
+                boardItem.style.justifyContent = 'space-between';
+                boardItem.style.border = '1px solid var(--border-color)';
+                
+                // ĐÃ XÓA class "notranslate" ở thẻ strong bên dưới
+                boardItem.innerHTML = `
+                    <strong class="text-primary">${boardName}</strong>
+                    <button class="btn-primary save-to-board-btn" style="padding: 6px 16px; font-size: 14px;">Lưu</button>
+                `;
+                
+                // THỰC SỰ LƯU ẢNH VÀO BẢNG
+                boardItem.querySelector('.save-to-board-btn').onclick = (e) => {
+                    e.stopPropagation(); 
+                    
+                    const currentImgSrc = document.getElementById('detailImg').src;
+                    if (currentImgSrc) {
+                        const contents = getBoardContents();
+                        if (!contents[boardName]) contents[boardName] = [];
+                        
+                        // Nếu ảnh chưa có trong bảng thì mới thêm vào
+                        if (!contents[boardName].includes(currentImgSrc)) {
+                            contents[boardName].unshift(currentImgSrc); // Thêm ảnh lên đầu bảng
+                            saveBoardContents(contents);
+                        }
+                    }
+                    
+                    alert('Đã lưu ảnh vào bảng: ' + boardName);
+                    document.getElementById('boardModal').classList.add('hidden');
+                    renderProfileBoards(); // Cập nhật lại ảnh bìa ngay lập tức
+                };
+                boardList.prepend(boardItem);
+            });
+        };
+        
+            document.getElementById('closeBoardModalBtn')?.addEventListener('click', () => {
+            document.getElementById('boardModal').classList.add('hidden');
+        });
+
+        const createBoardBtn = document.getElementById('createNewBoardBtn');
+        if (createBoardBtn) {
+            createBoardBtn.onclick = () => {
+                const inputEl = document.getElementById('newBoardName');
+                const boardName = inputEl.value.trim();
+                
+                if (boardName) {
+                    const boards = getBoards();
+                    if (!boards.includes(boardName)) {
+                        boards.push(boardName);
+                        saveBoards(boards);
+                        
+                        // Tạo luôn vùng chứa ảnh rỗng cho bảng mới
+                        const contents = getBoardContents();
+                        contents[boardName] = [];
+                        saveBoardContents(contents);
+                        
+                        renderBoardList(); 
+                    } else {
+                        alert('Bảng này đã tồn tại!');
+                    }
+                    inputEl.value = ''; 
+                }
+            };
+        }
+
+        document.getElementById('newBoardName')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('createNewBoardBtn')?.click();
+            }
+        });
+
+        const boardModal = document.getElementById('boardModal');
+        if (boardModal) {
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.attributeName === 'class' && !boardModal.classList.contains('hidden')) {
+                        renderBoardList();
+                    }
+                });
+            });
+            observer.observe(boardModal, { attributes: true });
+        }
     }
 });
 

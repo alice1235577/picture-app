@@ -189,7 +189,12 @@
                         <div>
                             <h2 id="profileName" class="fs-xl fw-bold text-primary notranslate">Người dùng</h2>
                             <p id="profileEmail" class="text-muted notranslate">email@gmail.com</p>
-                            <p class="text-muted mt-2 fs-sm">0 người theo dõi • 0 đang theo dõi</p>
+                            <p class="text-muted mt-2 fs-sm">
+                                <span id="openFollowStatsBtn" class="bg-hover" style="cursor: pointer; padding: 4px 8px; border-radius: 6px; display: inline-block; transition: background 0.2s;">
+                                    0 người theo dõi • 0 đang theo dõi
+                                </span>
+                            </p>                        
+
                         </div>
                     </div>
                     <div class="flex-align-center gap-2">
@@ -210,8 +215,20 @@
                     <p class="empty-state text-muted hidden" id="createdEmpty">Bạn chưa đăng ý tưởng nào.</p>
                 </div>
 
-                <!-- KHUNG CHỨA ẢNH ĐÃ LƯU -->
+                <!-- KHUNG CHỨA ẢNH ĐÃ LƯU (ĐÃ FIX LỖI THÊM KHU VỰC BẢNG) -->
                 <div class="tab-content hidden" id="tab-saved">
+                    
+                    <!-- KHOẢNG TRỐNG ĐỂ HIỂN THỊ CÁC BẢNG -->
+                    <div id="profileBoardsContainer" style="margin-bottom: 24px;">
+                        <h3 class="text-primary fw-bold mb-3" style="font-size: 16px;">Bảng của bạn</h3>
+                        <div id="profileBoardItems" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                            <!-- Các bảng lưu từ Modal sẽ được đẩy ra đây thông qua JS -->
+                        </div>
+                    </div>
+                    
+                    <div style="width: 100%; height: 1px; background: var(--border-color); margin-bottom: 20px;"></div>
+                    
+                    <h3 class="text-primary fw-bold mb-3" style="font-size: 16px;">Tất cả ảnh đã lưu</h3>
                     <div class="masonry-grid" id="savedGrid"></div>
                     <p class="empty-state text-muted hidden" id="savedEmpty">Bạn chưa lưu ý tưởng nào.</p>
                 </div>
@@ -397,11 +414,31 @@
                 </div>
                 
                 <div class="panel-body" style="padding-right: 8px;">
-                    <div class="search-box mb-4">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width: 18px; left: 14px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        <input type="text" id="searchUserInput" placeholder="Tìm kiếm theo tên hoặc email" style="padding: 14px 16px 14px 44px; border: 1px solid var(--border-color); border-radius: 20px; background: transparent; width: 100%;">
-                    </div>
-                    
+                <div class="search-box mb-4" style="position: relative; transition: all 0.3s ease;">
+                    <!-- Biểu tượng tìm kiếm hiện đại hơn -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="position: absolute; width: 20px; height: 20px; left: 16px; top: 50%; transform: translateY(-50%); pointer-events: none; z-index: 2;">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+
+                    <!-- Ô nhập liệu được thiết kế lại -->
+                    <input type="text" id="searchUserInput" placeholder="Tìm kiếm theo tên hoặc email..." 
+                        style="
+                            width: 100%;
+                            padding: 14px 16px 14px 48px; 
+                            border: 1px solid transparent; 
+                            border-radius: 12px; 
+                            background-color: var(--bg-hover); /* Màu nền xám nhạt */
+                            color: var(--text-primary);
+                            font-size: 15px;
+                            transition: all 0.2s ease;
+                            outline: none;
+                            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+                        "
+                        onfocus="this.style.backgroundColor='#ffffff'; this.style.borderColor='var(--accent-color)'; this.style.boxShadow='0 0 0 4px rgba(var(--accent-color-rgb), 0.1)';"
+                        onblur="this.style.backgroundColor='var(--bg-hover)'; this.style.borderColor='transparent'; this.style.boxShadow='inset 0 1px 3px rgba(0,0,0,0.05)';"
+                    >
+                </div>                    
                     <h4 class="text-primary fw-600 mb-3 mt-4" style="font-size: 15px;">Được đề xuất</h4>
                     <div id="suggestedUsersList">
                         <!-- Danh sách người dùng sẽ tự động hiện ở đây -->
@@ -651,6 +688,44 @@
                 <div class="flex-align-center gap-2 border-top pt-3">
                     <input type="text" id="newBoardName" class="input-field" placeholder="Tên bảng mới..." style="padding: 10px 16px;">
                     <button id="createNewBoardBtn" class="btn-primary" style="padding: 10px 20px;">Tạo</button>
+                </div>
+            </div>
+        </div>
+        <!-- MODAL DANH SÁCH THEO DÕI -->
+        <div class="modal-overlay hidden blur-backdrop" id="followStatsModal" style="z-index: 10010;">
+            <div class="modal-container bg-surface shadow-large" style="width: 400px; max-width: 95vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 80vh;">
+                <!-- Header của Modal -->
+                <div class="panel-header flex-align-center" style="padding: 16px; border-bottom: 1px solid var(--border-color); justify-content: center; position: relative;">
+                    <h3 class="text-primary fw-bold" style="font-size: 16px; margin: 0;">Danh sách tương tác</h3>
+                    <button class="icon-btn" id="closeFollowStatsBtn" style="position: absolute; right: 16px; top: 12px;">✕</button>
+                </div>
+                
+                <!-- Tab chuyển đổi giữa Followers và Following -->
+                <div class="profile-tabs" style="border-bottom: 1px solid var(--border-color); display: flex;">
+                    <button class="tab-item active" id="tabFollowers" style="flex: 1; text-align: center;">Người theo dõi</button>
+                    <button class="tab-item" id="tabFollowing" style="flex: 1; text-align: center;">Đang theo dõi</button>
+                </div>
+
+                <!-- Khung chứa danh sách -->
+                <div class="panel-body" style="padding: 16px; overflow-y: auto; flex: 1; background: var(--bg-main);">
+                    <div id="followStatsContent" style="display: flex; flex-direction: column; gap: 12px;">
+                        <!-- Dữ liệu người dùng sẽ được đổ vào đây bằng JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- MODAL CHI TIẾT BẢNG (HIỂN THỊ ẢNH ĐÃ LƯU) -->
+        <div class="modal-overlay hidden blur-backdrop" id="boardDetailModal" style="z-index: 10008;">
+            <div class="modal-container bg-surface shadow-large" style="width: 80vw; max-width: 1000px; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
+                <div class="panel-header flex-align-center" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); position: relative; justify-content: center; background: var(--bg-surface);">
+                    <button class="icon-btn text-primary" id="closeBoardDetailBtn" style="position: absolute; left: 16px;">←</button>
+                    <h2 class="text-primary fw-bold notranslate" id="boardDetailTitle" style="font-size: 22px; margin: 0;">Tên bảng</h2>
+                </div>
+                
+                <div class="panel-body" style="padding: 24px; overflow-y: auto; flex: 1; background: var(--bg-main);">
+                    <!-- Lưới ảnh của bảng -->
+                    <div class="masonry-grid" id="boardDetailGrid"></div>
+                    <p class="empty-state text-muted hidden" id="boardDetailEmpty">Bảng này chưa có ảnh nào. Hãy lưu thêm ảnh nhé!</p>
                 </div>
             </div>
         </div>

@@ -681,8 +681,9 @@
         </div>
         <!-- TÍNH NĂNG BẢNG (MODAL LƯU BẢNG) -->
         <div class="modal-overlay hidden blur-backdrop" id="boardModal">
-            <div class="modal-container bg-surface" style="width: 400px; padding: 24px;">
-                <button class="modal-close" id="closeBoardModalBtn" style="position: absolute; top: 16px; right: 16px; border: none; background: transparent; font-size: 1.2rem; cursor: pointer;">✕</button>
+            <div class="modal-container bg-surface" style="width: 400px; padding: 24px; position: relative;">
+                <!-- ĐÃ FIX: Thêm class icon-btn và màu text-primary để nút luôn hiện rõ -->
+                <button class="modal-close icon-btn" id="closeBoardModalBtn" style="position: absolute; top: 16px; right: 16px; color: var(--text-primary); z-index: 10;">✕</button>
                 <h2 class="fw-bold text-primary mb-4">Lưu vào bảng</h2>
                 <div id="boardList" style="max-height: 300px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
                 <div class="flex-align-center gap-2 border-top pt-3">
@@ -691,6 +692,7 @@
                 </div>
             </div>
         </div>
+        
         <!-- MODAL DANH SÁCH THEO DÕI -->
         <div class="modal-overlay hidden blur-backdrop" id="followStatsModal" style="z-index: 10010;">
             <div class="modal-container bg-surface shadow-large" style="width: 400px; max-width: 95vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 80vh;">
@@ -714,12 +716,14 @@
                 </div>
             </div>
         </div>
-        <!-- MODAL CHI TIẾT BẢNG (HIỂN THỊ ẢNH ĐÃ LƯU) -->
+<!-- MODAL CHI TIẾT BẢNG (HIỂN THỊ ẢNH ĐÃ LƯU) -->
         <div class="modal-overlay hidden blur-backdrop" id="boardDetailModal" style="z-index: 10008;">
             <div class="modal-container bg-surface shadow-large" style="width: 80vw; max-width: 1000px; height: 85vh; padding: 0; display: flex; flex-direction: column; overflow: hidden;">
                 <div class="panel-header flex-align-center" style="padding: 16px 24px; border-bottom: 1px solid var(--border-color); position: relative; justify-content: center; background: var(--bg-surface);">
                     <button class="icon-btn text-primary" id="closeBoardDetailBtn" style="position: absolute; left: 16px;">←</button>
                     <h2 class="text-primary fw-bold notranslate" id="boardDetailTitle" style="font-size: 22px; margin: 0;">Tên bảng</h2>
+                    <!-- ĐÃ THÊM NÚT ĐÓNG (✕) Ở GÓC PHẢI -->
+                    <button class="icon-btn" id="closeBoardDetailModalBtn" style="position: absolute; right: 16px;">✕</button>
                 </div>
                 
                 <div class="panel-body" style="padding: 24px; overflow-y: auto; flex: 1; background: var(--bg-main);">
@@ -785,6 +789,7 @@
                 });
             });
         });
+        
     </script>
 <!-- KẾT NỐI TRỰC TIẾP VÌ NẰM CÙNG CẤP VỚI INDEX.HTML -->
     <script src="api_key.js"></script>

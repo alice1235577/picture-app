@@ -828,7 +828,7 @@ Object.assign(window.App, {
         const getBoardContents = () => JSON.parse(localStorage.getItem('boardContents') || '{}');
         const saveBoardContents = (contents) => localStorage.setItem('boardContents', JSON.stringify(contents));
 
-const renderProfileBoards = () => {
+    const renderProfileBoards = () => {
             const boardItemsContainer = document.getElementById('profileBoardItems');
             if (!boardItemsContainer) return;
             
@@ -843,7 +843,6 @@ const renderProfileBoards = () => {
 
             boards.forEach(boardName => {
                 const boardImages = contents[boardName] || [];
-                // Bỏ chữ "Trống" trên ảnh bìa mặc định để tránh lỗi ngôn ngữ
                 const coverImgSrc = boardImages.length > 0 ? boardImages[0] : 'https://placehold.co/300x300/e0e0e0/a0a0a0';
 
                 const boardDiv = document.createElement('div');
@@ -857,7 +856,6 @@ const renderProfileBoards = () => {
                 boardDiv.onmouseenter = () => boardDiv.style.transform = 'scale(1.03)';
                 boardDiv.onmouseleave = () => boardDiv.style.transform = 'scale(1)';
                 
-                // ĐÃ XÓA class "notranslate" ở thẻ strong bên dưới
                 boardDiv.innerHTML = `
                     <div style="width: 100%; height: 160px; border-radius: 16px; overflow: hidden; background-color: var(--bg-hover); border: 1px solid var(--border-color);">
                         <img src="${coverImgSrc}" style="width: 100%; height: 100%; object-fit: cover; opacity: 0.9;" alt="Bìa bảng">
@@ -879,43 +877,86 @@ const renderProfileBoards = () => {
                         emptyState.classList.remove('hidden');
                     } else {
                         emptyState.classList.add('hidden');
-                        images.forEach(imgSrc => {
-                            const imgEl = document.createElement('img');
-                            imgEl.src = imgSrc;
-                            imgEl.style.width = '100%';
-                            imgEl.style.borderRadius = '16px';
-                            imgEl.style.marginBottom = '16px';
-                            imgEl.style.cursor = 'zoom-in';
-                            
-                            // Bấm vào ảnh trong bảng để xem kích thước lớn
-                            imgEl.onclick = () => {
-                                // 1. Mở hộp thoại chi tiết ảnh
-                                document.getElementById('detailImg').src = imgSrc;
-                                document.getElementById('detailModal').classList.remove('hidden');
-                                
-                                // 2. Đóng hộp thoại danh sách ảnh trong bảng đi
-                                document.getElementById('boardDetailModal').classList.add('hidden');
-                            };                            
-                            grid.appendChild(imgEl);
-                        });
-                    }
+                images.forEach(imgSrc => {
+                    const itemWrapper = document.createElement('div');
+                    itemWrapper.style.position = 'relative';
+                    itemWrapper.style.borderRadius = '16px';
+                    itemWrapper.style.overflow = 'hidden';
+                    itemWrapper.style.backgroundColor = 'var(--bg-hover)';
+                    itemWrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                    itemWrapper.style.cursor = 'zoom-in';
+                    
+                    const imgEl = document.createElement('img');
+                    imgEl.src = imgSrc;
+                    imgEl.style.width = '100%';
+                    imgEl.style.height = '240px'; // Cố định chiều cao khung ảnh để các cột đồng đều tuyệt đối
+                    imgEl.style.objectFit = 'cover';
+                    imgEl.style.display = 'block';
+                    
+                    // Nút Xóa (✕)
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '✕';
+                    deleteBtn.style.position = 'absolute';
+                    deleteBtn.style.top = '8px';
+                    deleteBtn.style.right = '8px';
+                    deleteBtn.style.background = 'rgba(239, 68, 68, 0.9)';
+                    deleteBtn.style.color = 'white';
+                    deleteBtn.style.border = 'none';
+                    deleteBtn.style.width = '28px';
+                    deleteBtn.style.height = '28px';
+                    deleteBtn.style.borderRadius = '50%';
+                    deleteBtn.style.cursor = 'pointer';
+                    deleteBtn.style.opacity = '0';
+                    deleteBtn.style.transition = 'opacity 0.2s';
+                    
+                    itemWrapper.onmouseenter = () => deleteBtn.style.opacity = '1';
+                    itemWrapper.onmouseleave = () => deleteBtn.style.opacity = '0';
+                    
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm(`Xóa ảnh này khỏi bảng?`)) {
+                            const contents = getBoardContents();
+                            contents[boardName] = contents[boardName].filter(src => src !== imgSrc);
+                            saveBoardContents(contents);
+                            renderProfileBoards();
+                            boardDiv.click();
+                        }
+                    };
+                    
+                    imgEl.onclick = () => {
+                        document.getElementById('detailImg').src = imgSrc;
+                        document.getElementById('detailModal').classList.remove('hidden');
+                        document.getElementById('boardDetailModal').classList.add('hidden');
+                    };
+                    
+                    itemWrapper.appendChild(imgEl);
+                    itemWrapper.appendChild(deleteBtn);
+                    grid.appendChild(itemWrapper);
+                });
+
+            }
                     detailModal.classList.remove('hidden');
                 };
 
                 boardItemsContainer.appendChild(boardDiv);
             });
         };
-        // Đóng Hộp thoại chi tiết bảng
+        
+        // CÁC SỰ KIỆN ĐÓNG HỘP THOẠI BẢNG
         document.getElementById('closeBoardDetailBtn')?.addEventListener('click', () => {
             document.getElementById('boardDetailModal').classList.add('hidden');
         });
+        
+        // Sự kiện cho nút Đóng (✕) mới tạo
+        document.getElementById('closeBoardDetailModalBtn')?.addEventListener('click', () => {
+            document.getElementById('boardDetailModal').classList.add('hidden');
+        });
+        
         window.addEventListener('click', (e) => {
             const modal = document.getElementById('boardDetailModal');
             if (e.target === modal) modal.classList.add('hidden');
         });
-
         // HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
-// HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
         const renderBoardList = () => {
             const boardList = document.getElementById('boardList');
             if (!boardList) return;

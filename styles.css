@@ -915,3 +915,9 @@ body.has-custom-bg.dark-mode .messages-panel {
     opacity: 0 !important;
     transform: translateY(-50%) scale(0.8) !important;
 }
+#boardDetailGrid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important; /* Tự động chia cột đều nhau, không bị chèn */
+    gap: 16px !important;
+    align-items: start;
+}

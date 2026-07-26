@@ -22,8 +22,28 @@ Object.assign(window.App, {
                             chat = { id: Date.now() + Math.floor(Math.random()*1000), participants: [this.state.currentUser.email, msg.sender], messages: [] };
                             chats.push(chat);
                         }
-                        chat.messages.push({ sender: msg.sender, text: msg.text, time: msg.time });
-                        chat.unreadFor = [this.state.currentUser.email];
+                        
+                        // CẬP NHẬT: Xử lý các loại hành động tin nhắn (Xóa, Thả cảm xúc, Gửi mới)
+                        const getMsgKey = (m) => m.msgId || m.id || (m.time + '_' + m.text);
+
+                        if (msg.action === 'delete') {
+                            chat.messages = chat.messages.filter(m => getMsgKey(m) !== msg.msgId);
+                        } else if (msg.action === 'react') {
+                            let targetMsg = chat.messages.find(m => getMsgKey(m) === msg.msgId);
+                            if (targetMsg) targetMsg.reaction = msg.reaction;
+                        } else {
+                            if (!chat.messages.find(m => getMsgKey(m) === (msg.msgId || msg.id))) {
+                                chat.messages.push({ 
+                                    msgId: msg.msgId || msg.id, 
+                                    sender: msg.sender, 
+                                    text: msg.text, 
+                                    time: msg.time,
+                                    reaction: msg.reaction || null 
+                                });
+                            }
+                            chat.unreadFor = [this.state.currentUser.email];
+                        }
+                    
                     });
 
                     localStorage.setItem('conversationsData', JSON.stringify(chats));

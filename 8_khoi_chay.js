@@ -400,16 +400,80 @@ Object.assign(window.App, {
             chatDetailView.classList.remove('hidden');
         };
 
+        // --- GIAO DIỆN HIỂN THỊ TIN NHẮN MỚI ---
+
+        const getMsgKey = (m) => m.msgId || m.id || (m.time + '_' + m.text);
+
+        // --- XỬ LÝ NÚT XÓA TIN NHẮN (THU HỒI 2 BÊN) ---
+        const handleDeleteMessage = async (chatId, msgKey, targetEmail) => {
+            if(!confirm("Thu hồi tin nhắn này ở cả hai bên?")) return;
+            
+            let chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
+            const chatIdx = chats.findIndex(c => c.id === chatId);
+            if(chatIdx > -1) {
+                // Lọc bỏ chuẩn xác tin nhắn nhờ hàm getMsgKey
+                chats[chatIdx].messages = chats[chatIdx].messages.filter(m => getMsgKey(m) !== msgKey);
+                localStorage.setItem('conversationsData', JSON.stringify(chats));
+                this.state.conversations = chats;
+                
+                if (typeof renderMessages === 'function') renderMessages();
+                if (typeof renderChatList === 'function') renderChatList();
+                
+                if (targetEmail) {
+                    const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
+                    let currentNotis = data ? (data.notifications || []) : [];
+                    currentNotis.push({ id: Date.now(), type: 'chat_msg', action: 'delete', msgId: msgKey, sender: this.state.currentUser.email, read: false });
+                    await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
+                }
+            }
+        };
+
+        // --- XỬ LÝ NÚT THẢ TIM / CẢM XÚC TIN NHẮN ---
+        const handleReactMessage = async (chatId, msgKey, targetEmail, reaction) => {
+            let chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
+            const chatIdx = chats.findIndex(c => c.id === chatId);
+            if(chatIdx > -1) {
+                let msg = chats[chatIdx].messages.find(m => getMsgKey(m) === msgKey);
+                if(msg) {
+                    msg.reaction = msg.reaction === reaction ? null : reaction; 
+                    localStorage.setItem('conversationsData', JSON.stringify(chats));
+                    this.state.conversations = chats;
+                    if (typeof renderMessages === 'function') renderMessages();
+                    
+                    if (targetEmail) {
+                        const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
+                        let currentNotis = data ? (data.notifications || []) : [];
+                        currentNotis.push({ id: Date.now(), type: 'chat_msg', action: 'react', msgId: msgKey, reaction: msg.reaction, sender: this.state.currentUser.email, read: false });
+                        await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);
+                    }
+                }
+            }
+        };
+
+        // --- GIAO DIỆN HIỂN THỊ TIN NHẮN ---
         const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
             const chat = this.state.conversations.find(c => c.id === this.state.activeChatId);
             if (!chat) return;
+            
+            const myEmail = this.state.currentUser.email;
+            const targetEmail = chat.participants.find(p => p !== myEmail);
 
             chat.messages.forEach(msg => {
-                const isMe = msg.sender === this.state.currentUser.email;
+                const isMe = msg.sender === myEmail;
+                const msgKey = getMsgKey(msg); // Lấy ID Chuẩn xác tuyệt đối
+                
+                const wrapper = document.createElement('div');
+                wrapper.style.display = 'flex';
+                wrapper.style.flexDirection = isMe ? 'row-reverse' : 'row';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                wrapper.style.marginBottom = '16px'; 
+                
                 const bubble = document.createElement('div');
                 bubble.className = `chat-bubble ${isMe ? 'sent' : 'received'}`;
+                bubble.style.position = 'relative';
                 
                 const textDiv = document.createElement('div');
                 textDiv.style.wordBreak = 'break-word';
@@ -419,18 +483,119 @@ Object.assign(window.App, {
                 if (msg.time) {
                     const dateObj = new Date(msg.time);
                     const timeString = dateObj.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + dateObj.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-                    
                     const timeDiv = document.createElement('div');
                     timeDiv.style.fontSize = '10.5px';
                     timeDiv.style.opacity = '0.6';
                     timeDiv.style.marginTop = '6px';
                     timeDiv.style.textAlign = isMe ? 'right' : 'left'; 
                     timeDiv.textContent = timeString;
-                    
                     bubble.appendChild(timeDiv);
                 }
+                
+                // Hiển thị Cảm xúc đã thả
+                if (msg.reaction) {
+                    const reactionBadge = document.createElement('div');
+                    reactionBadge.textContent = msg.reaction;
+                    reactionBadge.style.position = 'absolute';
+                    reactionBadge.style.bottom = '-12px';
+                    reactionBadge.style.right = isMe ? '12px' : 'auto';
+                    reactionBadge.style.left = isMe ? 'auto' : '12px';
+                    reactionBadge.style.background = 'var(--bg-surface)';
+                    reactionBadge.style.border = '1px solid var(--border-color)';
+                    reactionBadge.style.borderRadius = '20px';
+                    reactionBadge.style.padding = '2px 6px';
+                    reactionBadge.style.fontSize = '12px';
+                    reactionBadge.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    reactionBadge.style.zIndex = '2';
+                    bubble.appendChild(reactionBadge);
+                }
+                
+                const toolbar = document.createElement('div');
+                toolbar.style.display = 'flex';
+                toolbar.style.gap = '4px';
+                toolbar.style.opacity = '0'; 
+                toolbar.style.transition = 'opacity 0.2s';
+                
+                // --- BỘ CHỌN CẢM XÚC NHIỀU ICON ---
+                const reactContainer = document.createElement('div');
+                reactContainer.style.position = 'relative';
+                
+                const reactBtn = document.createElement('button');
+                reactBtn.innerHTML = '😀'; 
+                reactBtn.className = 'icon-btn shadow-sm bg-surface';
+                reactBtn.style.width = '28px';
+                reactBtn.style.height = '28px';
+                reactBtn.style.fontSize = '12px';
+                reactBtn.title = "Thả cảm xúc";
+                
+                const picker = document.createElement('div');
+                picker.className = 'shadow-large bg-surface border-standard';
+                picker.style.position = 'absolute';
+                picker.style.bottom = '100%';
+                picker.style.right = isMe ? '0' : 'auto';
+                picker.style.left = isMe ? 'auto' : '0';
+                picker.style.display = 'none'; 
+                picker.style.gap = '4px';
+                picker.style.padding = '4px 8px';
+                picker.style.borderRadius = '20px';
+                picker.style.zIndex = '10';
+                picker.style.marginBottom = '4px';
+                picker.style.whiteSpace = 'nowrap';
+                
+                const emojis = ['❤️', '😆', '😯', '😢', '😡', '👍'];
+                emojis.forEach(emoji => {
+                    const eBtn = document.createElement('button');
+                    eBtn.innerHTML = emoji;
+                    eBtn.style.background = 'none';
+                    eBtn.style.border = 'none';
+                    eBtn.style.fontSize = '16px';
+                    eBtn.style.cursor = 'pointer';
+                    eBtn.style.transition = 'transform 0.2s';
+                    eBtn.onmouseenter = () => eBtn.style.transform = 'scale(1.2)';
+                    eBtn.onmouseleave = () => eBtn.style.transform = 'scale(1)';
+                    
+                    eBtn.onclick = (e) => {
+                        e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                        handleReactMessage(chat.id, msgKey, targetEmail, emoji);
+                        picker.style.display = 'none';
+                    };
+                    picker.appendChild(eBtn);
+                });
+                
+                reactBtn.onclick = (e) => {
+                    e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                    picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
+                };
 
-                area.appendChild(bubble);
+                reactContainer.appendChild(reactBtn);
+                reactContainer.appendChild(picker);
+                toolbar.appendChild(reactContainer);
+
+                // --- NÚT XÓA TIN NHẮN CÓ HỎI XÁC NHẬN ---
+                if (isMe) {
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.innerHTML = '🗑️';
+                    deleteBtn.className = 'icon-btn shadow-sm bg-surface text-danger';
+                    deleteBtn.style.width = '28px';
+                    deleteBtn.style.height = '28px';
+                    deleteBtn.style.fontSize = '12px';
+                    deleteBtn.title = "Thu hồi tin nhắn";
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                        handleDeleteMessage(chat.id, msgKey, targetEmail);
+                    };
+                    toolbar.appendChild(deleteBtn);
+                }
+
+                wrapper.onmouseenter = () => toolbar.style.opacity = '1';
+                wrapper.onmouseleave = () => {
+                    toolbar.style.opacity = '0';
+                    picker.style.display = 'none'; // Tự động đóng bảng icon nếu bỏ chuột ra ngoài
+                };
+
+                wrapper.appendChild(bubble);
+                wrapper.appendChild(toolbar);
+                area.appendChild(wrapper);
             });
             area.scrollTop = area.scrollHeight; 
         };

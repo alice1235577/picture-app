@@ -1031,7 +1031,7 @@ Object.assign(window.App, {
     },
 
     // ĐÃ FIX: CHUYỂN HÀM RENDER PROFILE BOARD RA CHUẨN METHOD CỦA APP
-    renderProfileBoards() {
+renderProfileBoards() {
         const boardItemsContainer = document.getElementById('profileBoardItems');
         if (!boardItemsContainer) return;
         
@@ -1080,75 +1080,86 @@ Object.assign(window.App, {
                 grid.style.gap = '16px';
                 grid.style.alignItems = 'start';
                 
-                grid.innerHTML = '';
-                
-                if (boardImages.length === 0) {
-                    emptyState.classList.remove('hidden');
-                } else {
-                    emptyState.classList.add('hidden');
-                    boardImages.forEach(imgObj => {
-                        const itemWrapper = document.createElement('div');
-                        itemWrapper.style.position = 'relative';
-                        itemWrapper.style.borderRadius = '16px';
-                        itemWrapper.style.overflow = 'hidden';
-                        itemWrapper.style.backgroundColor = 'var(--bg-hover)';
-                        itemWrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                        itemWrapper.style.cursor = 'zoom-in';
-                        itemWrapper.style.width = '100%'; 
-                        
-                        const imgEl = document.createElement('img');
-                        imgEl.src = imgObj.url;
-                        imgEl.style.width = '100%';
-                        imgEl.style.height = '240px'; 
-                        imgEl.style.objectFit = 'cover';
-                        imgEl.style.display = 'block';
-                        
-                        const deleteBtn = document.createElement('button');
-                        deleteBtn.innerHTML = '✕';
-                        deleteBtn.style.position = 'absolute';
-                        deleteBtn.style.top = '8px';
-                        deleteBtn.style.right = '8px';
-                        deleteBtn.style.background = 'rgba(239, 68, 68, 0.9)';
-                        deleteBtn.style.color = 'white';
-                        deleteBtn.style.border = 'none';
-                        deleteBtn.style.width = '28px';
-                        deleteBtn.style.height = '28px';
-                        deleteBtn.style.borderRadius = '50%';
-                        deleteBtn.style.cursor = 'pointer';
-                        deleteBtn.style.opacity = '0';
-                        deleteBtn.style.transition = 'opacity 0.2s';
-                        
-                        itemWrapper.onmouseenter = () => deleteBtn.style.opacity = '1';
-                        itemWrapper.onmouseleave = () => deleteBtn.style.opacity = '0';
-                        
-                        deleteBtn.onclick = async (e) => {
-                            e.stopPropagation();
-                            if(confirm(`Xóa ảnh này khỏi bảng?`)) {
-                                const pos = board.ids.indexOf(imgObj.id);
-                                if (pos > -1) {
-                                    board.ids.splice(pos, 1);
-                                    await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
-                                    this.renderProfileBoards();
-                                    boardDiv.click(); // Làm mới lại UI của bảng
+                // --- ĐÃ FIX: HÀM RENDER LẠI LƯỚI ẢNH SAU KHI XÓA ---
+                const renderGrid = () => {
+                    grid.innerHTML = '';
+                    const updatedBoardImages = (board.ids || []).map(id => this.state.images.find(img => img.id === id)).filter(Boolean);
+                    
+                    if (updatedBoardImages.length === 0) {
+                        emptyState.classList.remove('hidden');
+                    } else {
+                        emptyState.classList.add('hidden');
+                        updatedBoardImages.forEach(imgObj => {
+                            const itemWrapper = document.createElement('div');
+                            itemWrapper.style.position = 'relative';
+                            itemWrapper.style.borderRadius = '16px';
+                            itemWrapper.style.overflow = 'hidden';
+                            itemWrapper.style.backgroundColor = 'var(--bg-hover)';
+                            itemWrapper.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                            itemWrapper.style.cursor = 'zoom-in';
+                            itemWrapper.style.width = '100%'; 
+                            
+                            const imgEl = document.createElement('img');
+                            imgEl.src = imgObj.url;
+                            imgEl.style.width = '100%';
+                            imgEl.style.height = '240px'; 
+                            imgEl.style.objectFit = 'cover';
+                            imgEl.style.display = 'block';
+                            
+                            const deleteBtn = document.createElement('button');
+                            deleteBtn.innerHTML = '✕';
+                            deleteBtn.style.position = 'absolute';
+                            deleteBtn.style.top = '8px';
+                            deleteBtn.style.right = '8px';
+                            deleteBtn.style.background = 'rgba(239, 68, 68, 0.9)';
+                            deleteBtn.style.color = 'white';
+                            deleteBtn.style.border = 'none';
+                            deleteBtn.style.width = '28px';
+                            deleteBtn.style.height = '28px';
+                            deleteBtn.style.borderRadius = '50%';
+                            deleteBtn.style.cursor = 'pointer';
+                            deleteBtn.style.opacity = '0';
+                            deleteBtn.style.transition = 'opacity 0.2s';
+                            
+                            itemWrapper.onmouseenter = () => deleteBtn.style.opacity = '1';
+                            itemWrapper.onmouseleave = () => deleteBtn.style.opacity = '0';
+                            
+                            deleteBtn.onclick = async (e) => {
+                                e.stopPropagation();
+                                if(confirm(`Xóa ảnh này khỏi bảng?`)) {
+                                    const pos = board.ids.indexOf(imgObj.id);
+                                    if (pos > -1) {
+                                        board.ids.splice(pos, 1);
+                                        await supabaseClient.from('users').update({ boards: this.state.currentUser.boards }).eq('email', this.state.currentUser.email);
+                                        
+                                        // Gọi hàm renderGrid để cập nhật ngay lập tức
+                                        renderGrid();
+                                        
+                                        // Cập nhật lại danh sách bảng ngoài trang cá nhân (để cập nhật ảnh bìa bảng)
+                                        this.renderProfileBoards();
+                                    }
                                 }
-                            }
-                        };
-                        
-                        imgEl.onclick = () => {
-                            if (typeof this.openDetailModal === 'function') {
-                                this.openDetailModal(imgObj);
-                            } else {
-                                document.getElementById('detailImg').src = imgObj.url;
-                                document.getElementById('detailModal').classList.remove('hidden');
-                            }
-                            document.getElementById('boardDetailModal').classList.add('hidden');
-                        };
-                        
-                        itemWrapper.appendChild(imgEl);
-                        itemWrapper.appendChild(deleteBtn);
-                        grid.appendChild(itemWrapper);
-                    });
-                }
+                            };
+                            
+                            imgEl.onclick = () => {
+                                if (typeof this.openDetailModal === 'function') {
+                                    this.openDetailModal(imgObj);
+                                } else {
+                                    document.getElementById('detailImg').src = imgObj.url;
+                                    document.getElementById('detailModal').classList.remove('hidden');
+                                }
+                                document.getElementById('boardDetailModal').classList.add('hidden');
+                            };
+                            
+                            itemWrapper.appendChild(imgEl);
+                            itemWrapper.appendChild(deleteBtn);
+                            grid.appendChild(itemWrapper);
+                        });
+                    }
+                };
+                
+                // Gọi hàm renderGrid khi mở modal
+                renderGrid();
                 detailModal.classList.remove('hidden');
             };
             boardItemsContainer.appendChild(boardDiv);

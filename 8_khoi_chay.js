@@ -159,10 +159,62 @@ Object.assign(window.App, {
             }
         });
 
-        document.querySelectorAll('.tag-pill').forEach(btn => {
+document.querySelectorAll('.tag-pill').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget;
                 const container = target.closest('.tags-container');
+
+                // --- THÊM MỚI: XỬ LÝ BẬT BẢNG NHẬP TÊN NGAY KHI BẤM NÚT "KHÁC" ---
+                if (container.id === 'uploadCategoryTags' && target.dataset.val === 'Khác') {
+                    const customCat = prompt("Vui lòng nhập tên thể loại mới:");
+                    if (customCat && customCat.trim() !== '') {
+                        const newCat = customCat.trim();
+                        
+                        // 1. Tạo nút Thể loại mới với tên vừa nhập
+                        const newBtn = document.createElement('button');
+                        newBtn.className = 'tag-pill active solid-tag';
+                        newBtn.dataset.val = newCat;
+                        newBtn.textContent = newCat;
+                        
+                        // 2. Tắt sáng (active) các nút hiện tại
+                        container.querySelectorAll('.tag-pill').forEach(b => {
+                            b.classList.remove('active', 'solid-tag');
+                            b.classList.add('outline-tag');
+                        });
+                        
+                        // 3. Cho phép nút mới tạo có thể bấm chọn qua lại bình thường
+                        newBtn.addEventListener('click', (ev) => {
+                            container.querySelectorAll('.tag-pill').forEach(b => {
+                                b.classList.remove('active', 'solid-tag');
+                                b.classList.add('outline-tag');
+                            });
+                            ev.currentTarget.classList.remove('outline-tag');
+                            ev.currentTarget.classList.add('active', 'solid-tag');
+                        });
+
+                        // 4. Chèn nút mới vào ngay đằng trước nút "Khác"
+                        container.insertBefore(newBtn, target);
+                        
+                        // 5. Tự động gắn luôn thẻ này vào thanh menu ở trang chủ
+                        const homeTags = document.getElementById('categoryTags');
+                        if (homeTags && !homeTags.querySelector(`[data-filter="${newCat}"]`)) {
+                            const newHomeBtn = document.createElement('button');
+                            newHomeBtn.className = 'tag-pill';
+                            newHomeBtn.setAttribute('data-filter', newCat);
+                            newHomeBtn.textContent = newCat;
+                            newHomeBtn.addEventListener('click', (ev) => {
+                                homeTags.querySelectorAll('.tag-pill').forEach(b => b.classList.remove('active'));
+                                ev.currentTarget.classList.add('active');
+                                this.state.currentTag = newCat;
+                                this.renderGallery(true);
+                            });
+                            homeTags.appendChild(newHomeBtn);
+                        }
+                    }
+                    return; // Ngừng tại đây, không cho phép nút "Khác" sáng lên
+                }
+
+                // Xử lý click cho các nút bình thường khác (GIỮ NGUYÊN)
                 container.querySelectorAll('.tag-pill').forEach(b => {
                     b.classList.remove('active', 'solid-tag');
                     if (container.id === 'uploadCategoryTags') b.classList.add('outline-tag');
@@ -178,7 +230,6 @@ Object.assign(window.App, {
                 }
             });
         });
-
         const searchInput = document.getElementById('searchInput');
         const searchDropdown = document.getElementById('searchDropdown');
         const dropdownContent = document.getElementById('dropdownContent');

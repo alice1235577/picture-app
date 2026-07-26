@@ -1,4 +1,4 @@
-    Object.assign(window.App, {
+Object.assign(window.App, {
     async loadData() {
         const { data: postsData, error: postsError } = await supabaseClient.from('posts').select('*').order('id', { ascending: false });
         const { data: usersData, error: usersError } = await supabaseClient.from('users').select('email, name, avatar');
@@ -249,6 +249,73 @@
         this.renderGallery(); 
     },
     
+    // --- HÀM XỬ LÝ SỰ KIỆN SỬA/XÓA/THẢ TIM BÌNH LUẬN ---
+// --- HÀM XỬ LÝ SỰ KIỆN SỬA/XÓA/THẢ TIM BÌNH LUẬN ---
+    async handleCommentAction(action, postId, commentId, parentId = null) {
+        const img = this.state.images.find(i => i.id === postId);
+        if (!img) return;
+
+        let targetComment = null;
+        let parentArray = img.comments;
+
+        if (parentId) {
+            const parent = img.comments.find(c => c.id === parentId);
+            if (parent) {
+                parentArray = parent.replies;
+                targetComment = parent.replies.find(r => r.id == commentId || r.time == commentId);
+            }
+        } else {
+            targetComment = img.comments.find(c => c.id == commentId);
+        }
+
+        if (!targetComment) return;
+
+        // Lấy tên người dùng hiện tại để làm thông báo
+        const myName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
+        let notiMessage = ''; // Biến chứa nội dung thông báo
+
+        if (action === 'delete') {
+            if (confirm("Bạn có chắc chắn muốn xóa bình luận này?")) {
+                const idx = parentArray.indexOf(targetComment);
+                if (idx > -1) parentArray.splice(idx, 1);
+            } else return;
+        } else if (action === 'edit') {
+            const newText = prompt("Chỉnh sửa bình luận:", targetComment.text);
+            if (newText !== null && newText.trim() !== '') {
+                targetComment.text = newText.trim();
+                // Tạo thông báo khi sửa bình luận
+                notiMessage = `📝 ${myName} đã chỉnh sửa một bình luận trong ảnh "${img.title}" của bạn.`;
+            } else return;
+        } else if (action === 'react') {
+            if (!targetComment.reactions) targetComment.reactions = [];
+            const email = this.state.currentUser.email;
+            const rIdx = targetComment.reactions.indexOf(email);
+            if (rIdx > -1) {
+                targetComment.reactions.splice(rIdx, 1); // Gỡ tim (Không gửi thông báo)
+            } else {
+                targetComment.reactions.push(email);
+                // Tạo thông báo khi thả tim
+                notiMessage = `❤️ ${myName} đã thả tim một bình luận trong ảnh "${img.title}" của bạn.`;
+            }
+        }
+
+        // Cập nhật dữ liệu lên Supabase
+        const { error } = await supabaseClient.from('posts').update({ comments: img.comments }).eq('id', img.id);
+        if (error) {
+            alert("Lỗi khi cập nhật bình luận!");
+            return;
+        }
+        
+        // Vẽ lại giao diện bình luận
+        this.renderComments(img);
+
+        // --- GỬI THÔNG BÁO CHO CHỦ BÀI VIẾT ---
+        // Chỉ gửi nếu có nội dung thông báo và người thao tác KHÔNG PHẢI là chủ bài viết
+        if (notiMessage && img.owner !== this.state.currentUser.email) {
+            this.pushNotification(img.owner, notiMessage, img.id);
+        }
+    },
+    // --- CẬP NHẬT: THÊM GIAO DIỆN SỬA/XÓA/TIM VÀO BÌNH LUẬN ---
     renderComments(item) {
         const area = document.getElementById('commentsListArea');
         area.innerHTML = '';
@@ -259,8 +326,17 @@
             return;
         }
 
+        const myName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
+        const isPostOwner = item.owner === this.state.currentUser.email;
+
         comments.forEach(c => {
             const replies = c.replies || [];
+            const isCommentAuthor = c.user === myName;
+            const canEditDelete = isCommentAuthor || isPostOwner; // Cho phép Tác giả bình luận HOẶC Chủ bài viết được Xóa/Sửa
+            
+            const cReactions = c.reactions || [];
+            const cHasReacted = cReactions.includes(this.state.currentUser.email);
+
             area.innerHTML += `
                 <div class="comment-block">
                     <div class="flex-align-center" style="gap: 8px;">
@@ -269,22 +345,40 @@
                     </div>
                     <div class="flex-align-center mt-1" style="gap: 16px;">
                         <span class="fs-sm text-muted" style="font-size: 11px;">${c.time}</span>
+                        <button class="btn-text fs-sm fw-bold p-0 ${cHasReacted ? 'text-danger' : 'text-primary'}" onclick="App.handleCommentAction('react', ${item.id}, ${c.id})">${cHasReacted ? '❤️' : '🤍'} ${cReactions.length > 0 ? cReactions.length : ''}</button>
                         <button class="btn-text fs-sm fw-bold p-0 text-primary" onclick="App.prepareReply(${c.id}, '${c.user}')">Trả lời</button>
+                        ${canEditDelete ? `
+                            <button class="btn-text fs-sm fw-bold p-0 text-secondary" onclick="App.handleCommentAction('edit', ${item.id}, ${c.id})">Sửa</button>
+                            <button class="btn-text fs-sm fw-bold p-0 text-danger" onclick="App.handleCommentAction('delete', ${item.id}, ${c.id})">Xóa</button>
+                        ` : ''}
                     </div>
                     
                     ${replies.length > 0 ? `
                         <div class="ps-3 border-start mt-2">
-                            ${replies.map(r => `
+                            ${replies.map(r => {
+                                const isReplyAuthor = r.user === myName;
+                                const canEditDeleteReply = isReplyAuthor || isPostOwner;
+                                const rReactions = r.reactions || [];
+                                const rHasReacted = rReactions.includes(this.state.currentUser.email);
+                                const rIdParams = r.id ? r.id : `'${r.time}'`; // Hỗ trợ tương thích ngược với dữ liệu cũ
+                                
+                                return `
                                 <div class="mt-2">
                                     <div class="flex-align-center" style="gap: 8px;">
                                         <strong class="fs-sm text-primary notranslate">${r.user}</strong>
                                         <span class="fs-sm text-secondary">${r.text}</span>
                                     </div>
-                                    <div class="flex-align-center mt-1">
+                                    <div class="flex-align-center mt-1" style="gap: 16px;">
                                         <span class="fs-sm text-muted" style="font-size: 11px;">${r.time}</span>
+                                        <button class="btn-text fs-sm fw-bold p-0 ${rHasReacted ? 'text-danger' : 'text-primary'}" onclick="App.handleCommentAction('react', ${item.id}, ${rIdParams}, ${c.id})">${rHasReacted ? '❤️' : '🤍'} ${rReactions.length > 0 ? rReactions.length : ''}</button>
+                                        ${canEditDeleteReply ? `
+                                            <button class="btn-text fs-sm fw-bold p-0 text-secondary" onclick="App.handleCommentAction('edit', ${item.id}, ${rIdParams}, ${c.id})">Sửa</button>
+                                            <button class="btn-text fs-sm fw-bold p-0 text-danger" onclick="App.handleCommentAction('delete', ${item.id}, ${rIdParams}, ${c.id})">Xóa</button>
+                                        ` : ''}
                                     </div>
                                 </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
                     ` : ''}
                 </div>
@@ -307,7 +401,9 @@
         const img = this.state.images.find(i => i.id === this.state.activeImageId);
         if(!img) return;
 
-        const timeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        // CẬP NHẬT: Thêm định dạng đầy đủ Ngày/Tháng/Năm - Giờ:Phút
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('vi-VN', {hour: '2-digit', minute: '2-digit'}) + ' - ' + now.toLocaleDateString('vi-VN');
         const authorName = this.state.currentUser.name || this.state.currentUser.email.split('@')[0];
 
         let targetEmail = img.owner; 
@@ -317,7 +413,8 @@
             const parentComment = img.comments.find(c => c.id === this.state.replyingToId);
             if (parentComment) {
                 if(!parentComment.replies) parentComment.replies = [];
-                parentComment.replies.push({ user: authorName, text: text, time: timeStr });
+                // Bổ sung thuộc tính id và reactions cho các câu trả lời mới
+                parentComment.replies.push({ id: Date.now(), user: authorName, text: text, time: timeStr, reactions: [] });
 
                 const targetUserObj = this.state.allUsers.find(u => u.name === parentComment.user || u.email.split('@')[0] === parentComment.user);
                 if (targetUserObj) {
@@ -328,7 +425,8 @@
             this.state.replyingToId = null; 
         } else {
             if(!img.comments) img.comments = [];
-            img.comments.push({ id: Date.now(), user: authorName, text: text, time: timeStr, replies: [] });
+            // Bổ sung thuộc tính reactions cho bình luận gốc
+            img.comments.push({ id: Date.now(), user: authorName, text: text, time: timeStr, replies: [], reactions: [] });
             this.state.replyingToId = null;
         }
 

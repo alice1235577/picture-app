@@ -400,18 +400,14 @@ Object.assign(window.App, {
             chatDetailView.classList.remove('hidden');
         };
 
-        // --- GIAO DIỆN HIỂN THỊ TIN NHẮN MỚI ---
-
         const getMsgKey = (m) => m.msgId || m.id || (m.time + '_' + m.text);
 
-        // --- XỬ LÝ NÚT XÓA TIN NHẮN (THU HỒI 2 BÊN) ---
         const handleDeleteMessage = async (chatId, msgKey, targetEmail) => {
             if(!confirm("Thu hồi tin nhắn này ở cả hai bên?")) return;
             
             let chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
             const chatIdx = chats.findIndex(c => c.id === chatId);
             if(chatIdx > -1) {
-                // Lọc bỏ chuẩn xác tin nhắn nhờ hàm getMsgKey
                 chats[chatIdx].messages = chats[chatIdx].messages.filter(m => getMsgKey(m) !== msgKey);
                 localStorage.setItem('conversationsData', JSON.stringify(chats));
                 this.state.conversations = chats;
@@ -428,7 +424,6 @@ Object.assign(window.App, {
             }
         };
 
-        // --- XỬ LÝ NÚT THẢ TIM / CẢM XÚC TIN NHẮN ---
         const handleReactMessage = async (chatId, msgKey, targetEmail, reaction) => {
             let chats = JSON.parse(localStorage.getItem('conversationsData') || '[]');
             const chatIdx = chats.findIndex(c => c.id === chatId);
@@ -450,7 +445,6 @@ Object.assign(window.App, {
             }
         };
 
-        // --- GIAO DIỆN HIỂN THỊ TIN NHẮN ---
         const renderMessages = () => {
             const area = document.getElementById('chatMessagesArea');
             area.innerHTML = '';
@@ -462,7 +456,7 @@ Object.assign(window.App, {
 
             chat.messages.forEach(msg => {
                 const isMe = msg.sender === myEmail;
-                const msgKey = getMsgKey(msg); // Lấy ID Chuẩn xác tuyệt đối
+                const msgKey = getMsgKey(msg); 
                 
                 const wrapper = document.createElement('div');
                 wrapper.style.display = 'flex';
@@ -492,7 +486,6 @@ Object.assign(window.App, {
                     bubble.appendChild(timeDiv);
                 }
                 
-                // Hiển thị Cảm xúc đã thả
                 if (msg.reaction) {
                     const reactionBadge = document.createElement('div');
                     reactionBadge.textContent = msg.reaction;
@@ -516,7 +509,6 @@ Object.assign(window.App, {
                 toolbar.style.opacity = '0'; 
                 toolbar.style.transition = 'opacity 0.2s';
                 
-                // --- BỘ CHỌN CẢM XÚC NHIỀU ICON ---
                 const reactContainer = document.createElement('div');
                 reactContainer.style.position = 'relative';
                 
@@ -555,7 +547,7 @@ Object.assign(window.App, {
                     eBtn.onmouseleave = () => eBtn.style.transform = 'scale(1)';
                     
                     eBtn.onclick = (e) => {
-                        e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                        e.stopPropagation();
                         handleReactMessage(chat.id, msgKey, targetEmail, emoji);
                         picker.style.display = 'none';
                     };
@@ -563,7 +555,7 @@ Object.assign(window.App, {
                 });
                 
                 reactBtn.onclick = (e) => {
-                    e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                    e.stopPropagation();
                     picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
                 };
 
@@ -571,7 +563,6 @@ Object.assign(window.App, {
                 reactContainer.appendChild(picker);
                 toolbar.appendChild(reactContainer);
 
-                // --- NÚT XÓA TIN NHẮN CÓ HỎI XÁC NHẬN ---
                 if (isMe) {
                     const deleteBtn = document.createElement('button');
                     deleteBtn.innerHTML = '🗑️';
@@ -581,7 +572,7 @@ Object.assign(window.App, {
                     deleteBtn.style.fontSize = '12px';
                     deleteBtn.title = "Thu hồi tin nhắn";
                     deleteBtn.onclick = (e) => {
-                        e.stopPropagation(); // FIX: Ngăn click lan ra ngoài gây sập bảng chat
+                        e.stopPropagation();
                         handleDeleteMessage(chat.id, msgKey, targetEmail);
                     };
                     toolbar.appendChild(deleteBtn);
@@ -590,7 +581,7 @@ Object.assign(window.App, {
                 wrapper.onmouseenter = () => toolbar.style.opacity = '1';
                 wrapper.onmouseleave = () => {
                     toolbar.style.opacity = '0';
-                    picker.style.display = 'none'; // Tự động đóng bảng icon nếu bỏ chuột ra ngoài
+                    picker.style.display = 'none'; 
                 };
 
                 wrapper.appendChild(bubble);
@@ -606,21 +597,18 @@ Object.assign(window.App, {
             if(newMessageView) newMessageView.classList.add('hidden');
             document.getElementById('chatListView').classList.remove('hidden');
         });
-        // Bắt sự kiện khi click vào nút "Tin nhắn mới"
+        
         document.getElementById('newMessageBtn')?.addEventListener('click', () => {
-            // Ẩn danh sách tin nhắn hiện tại
             const chatListView = document.getElementById('chatListView');
             if (chatListView) {
                 chatListView.classList.add('hidden');
             }
             
-            // Hiển thị giao diện tìm kiếm/tạo tin nhắn mới
             const newMessageView = document.getElementById('newMessageView');
             if (newMessageView) {
                 newMessageView.classList.remove('hidden');
             }
             
-            // Tự động focus con trỏ chuột vào ô tìm kiếm người dùng
             const searchInput = document.getElementById('searchUserInput');
             if (searchInput) {
                 searchInput.focus();
@@ -731,7 +719,10 @@ Object.assign(window.App, {
                 const myEmail = this.state.currentUser.email;
                 const targetEmail = chats[chatIdx].participants.find(p => p !== myEmail);
 
-                chats[chatIdx].messages.push({ sender: myEmail, text: text, time: Date.now() });
+                // --- ĐÃ FIX: TẠO ID DUY NHẤT ĐỂ ĐỒNG BỘ 2 BÊN TỪ LÚC GỬI ---
+                const msgId = Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+
+                chats[chatIdx].messages.push({ msgId: msgId, sender: myEmail, text: text, time: Date.now(), reaction: null });
                 localStorage.setItem('conversationsData', JSON.stringify(chats));
                 this.state.conversations = chats; 
                 
@@ -744,8 +735,9 @@ Object.assign(window.App, {
                     const { data } = await supabaseClient.from('users').select('notifications').eq('email', targetEmail).single();
                     let currentNotis = data ? (data.notifications || []) : [];
                     
+                    // --- ĐÃ FIX: ĐẨY LÊN MÁY CHỦ KÈM LỆNH 'send' VÀ msgId CHUẨN XÁC ---
                     currentNotis.push({
-                        id: Date.now(), type: 'chat_msg', sender: myEmail, text: text, read: false, time: Date.now()
+                        id: Date.now(), type: 'chat_msg', action: 'send', msgId: msgId, sender: myEmail, text: text, read: false, time: Date.now()
                     });
 
                     await supabaseClient.from('users').update({ notifications: currentNotis }).eq('email', targetEmail);

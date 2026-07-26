@@ -1165,6 +1165,7 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
             if (e.target === modal) modal.classList.add('hidden');
         });
         // HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
+// HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
         const renderBoardList = () => {
             const boardList = document.getElementById('boardList');
             if (!boardList) return;
@@ -1188,8 +1189,24 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                 boardItem.querySelector('.save-to-board-btn').onclick = (e) => {
                     e.stopPropagation(); 
                     
-                    const currentImgSrc = document.getElementById('detailImg').src;
-                    if (currentImgSrc) {
+                    let currentImgSrc = '';
+                    
+                    // ĐÃ FIX: Lấy chính xác ID ảnh đang click (từ ngoài trang chủ HOẶC trong modal chi tiết)
+                    const targetId = this.state.imageToSaveId || this.state.activeImageId;
+                    
+                    if (targetId) {
+                        const targetImg = this.state.images.find(img => img.id === targetId);
+                        if (targetImg) {
+                            currentImgSrc = targetImg.url;
+                        }
+                    }
+                    
+                    // Fallback phòng hờ (nếu vì lý do nào đó không lấy được ID thì lấy tạm ảnh ở detail)
+                    if (!currentImgSrc) {
+                        currentImgSrc = document.getElementById('detailImg').src;
+                    }
+
+                    if (currentImgSrc && currentImgSrc.trim() !== '' && !currentImgSrc.endsWith(window.location.host + '/')) {
                         const contents = getBoardContents();
                         if (!contents[boardName]) contents[boardName] = [];
                         
@@ -1203,11 +1220,13 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                     alert('Đã lưu ảnh vào bảng: ' + boardName);
                     document.getElementById('boardModal').classList.add('hidden');
                     renderProfileBoards(); // Cập nhật lại ảnh bìa ngay lập tức
+                    
+                    // Reset lại id ảnh sau khi lưu xong để tránh bị lưu nhầm vào lần sau
+                    this.state.imageToSaveId = null;
                 };
                 boardList.prepend(boardItem);
             });
-        };
-        
+        };        
             document.getElementById('closeBoardModalBtn')?.addEventListener('click', () => {
             document.getElementById('boardModal').classList.add('hidden');
         });

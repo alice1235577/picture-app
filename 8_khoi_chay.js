@@ -115,7 +115,6 @@ Object.assign(window.App, {
             document.getElementById('headerWrapper').classList.add('hidden'); 
             this.profilePage.classList.remove('hidden'); 
             this.switchProfileTab('created'); 
-            // Thêm renderProfileBoards vào sự kiện mở profile
             renderProfileBoards();
         });
 
@@ -159,30 +158,26 @@ Object.assign(window.App, {
             }
         });
 
-document.querySelectorAll('.tag-pill').forEach(btn => {
+        document.querySelectorAll('.tag-pill').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.currentTarget;
                 const container = target.closest('.tags-container');
 
-                // --- THÊM MỚI: XỬ LÝ BẬT BẢNG NHẬP TÊN NGAY KHI BẤM NÚT "KHÁC" ---
                 if (container.id === 'uploadCategoryTags' && target.dataset.val === 'Khác') {
                     const customCat = prompt("Vui lòng nhập tên thể loại mới:");
                     if (customCat && customCat.trim() !== '') {
                         const newCat = customCat.trim();
                         
-                        // 1. Tạo nút Thể loại mới với tên vừa nhập
                         const newBtn = document.createElement('button');
                         newBtn.className = 'tag-pill active solid-tag';
                         newBtn.dataset.val = newCat;
                         newBtn.textContent = newCat;
                         
-                        // 2. Tắt sáng (active) các nút hiện tại
                         container.querySelectorAll('.tag-pill').forEach(b => {
                             b.classList.remove('active', 'solid-tag');
                             b.classList.add('outline-tag');
                         });
                         
-                        // 3. Cho phép nút mới tạo có thể bấm chọn qua lại bình thường
                         newBtn.addEventListener('click', (ev) => {
                             container.querySelectorAll('.tag-pill').forEach(b => {
                                 b.classList.remove('active', 'solid-tag');
@@ -192,10 +187,8 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                             ev.currentTarget.classList.add('active', 'solid-tag');
                         });
 
-                        // 4. Chèn nút mới vào ngay đằng trước nút "Khác"
                         container.insertBefore(newBtn, target);
                         
-                        // 5. Tự động gắn luôn thẻ này vào thanh menu ở trang chủ
                         const homeTags = document.getElementById('categoryTags');
                         if (homeTags && !homeTags.querySelector(`[data-filter="${newCat}"]`)) {
                             const newHomeBtn = document.createElement('button');
@@ -211,10 +204,9 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                             homeTags.appendChild(newHomeBtn);
                         }
                     }
-                    return; // Ngừng tại đây, không cho phép nút "Khác" sáng lên
+                    return; 
                 }
 
-                // Xử lý click cho các nút bình thường khác (GIỮ NGUYÊN)
                 container.querySelectorAll('.tag-pill').forEach(b => {
                     b.classList.remove('active', 'solid-tag');
                     if (container.id === 'uploadCategoryTags') b.classList.add('outline-tag');
@@ -1164,8 +1156,22 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
             const modal = document.getElementById('boardDetailModal');
             if (e.target === modal) modal.classList.add('hidden');
         });
+
+        // --- ĐÃ FIX: BẮT CHÍNH XÁC ẢNH ĐƯỢC BẤM ĐỂ KHÔNG BAO GIỜ LƯU NHẦM ---
+        window.addEventListener('click', (e) => {
+            const saveBtn = e.target.closest('.card-save-btn');
+            if (saveBtn) {
+                const card = saveBtn.closest('.card');
+                if (card) {
+                    const img = card.querySelector('img');
+                    if (img) {
+                        window._accurateImgToSave = img.src;
+                    }
+                }
+            }
+        }, true);
+
         // HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
-// HIỂN THỊ DANH SÁCH BẢNG TRONG LÚC LƯU
         const renderBoardList = () => {
             const boardList = document.getElementById('boardList');
             if (!boardList) return;
@@ -1179,29 +1185,24 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                 boardItem.style.justifyContent = 'space-between';
                 boardItem.style.border = '1px solid var(--border-color)';
                 
-                // ĐÃ XÓA class "notranslate" ở thẻ strong bên dưới
                 boardItem.innerHTML = `
                     <strong class="text-primary">${boardName}</strong>
                     <button class="btn-primary save-to-board-btn" style="padding: 6px 16px; font-size: 14px;">Lưu</button>
                 `;
                 
-                // THỰC SỰ LƯU ẢNH VÀO BẢNG
                 boardItem.querySelector('.save-to-board-btn').onclick = (e) => {
                     e.stopPropagation(); 
                     
-                    let currentImgSrc = '';
+                    let currentImgSrc = window._accurateImgToSave;
                     
-                    // ĐÃ FIX: Lấy chính xác ID ảnh đang click (từ ngoài trang chủ HOẶC trong modal chi tiết)
-                    const targetId = this.state.imageToSaveId || this.state.activeImageId;
-                    
-                    if (targetId) {
-                        const targetImg = this.state.images.find(img => img.id === targetId);
-                        if (targetImg) {
-                            currentImgSrc = targetImg.url;
+                    if (!currentImgSrc) {
+                        const targetId = this.state.imageToSaveId || this.state.activeImageId;
+                        if (targetId) {
+                            const targetImg = this.state.images.find(img => img.id === targetId);
+                            if (targetImg) currentImgSrc = targetImg.url;
                         }
                     }
                     
-                    // Fallback phòng hờ (nếu vì lý do nào đó không lấy được ID thì lấy tạm ảnh ở detail)
                     if (!currentImgSrc) {
                         currentImgSrc = document.getElementById('detailImg').src;
                     }
@@ -1210,19 +1211,18 @@ document.querySelectorAll('.tag-pill').forEach(btn => {
                         const contents = getBoardContents();
                         if (!contents[boardName]) contents[boardName] = [];
                         
-                        // Nếu ảnh chưa có trong bảng thì mới thêm vào
                         if (!contents[boardName].includes(currentImgSrc)) {
-                            contents[boardName].unshift(currentImgSrc); // Thêm ảnh lên đầu bảng
+                            contents[boardName].unshift(currentImgSrc); 
                             saveBoardContents(contents);
                         }
                     }
                     
                     alert('Đã lưu ảnh vào bảng: ' + boardName);
                     document.getElementById('boardModal').classList.add('hidden');
-                    renderProfileBoards(); // Cập nhật lại ảnh bìa ngay lập tức
+                    renderProfileBoards(); 
                     
-                    // Reset lại id ảnh sau khi lưu xong để tránh bị lưu nhầm vào lần sau
                     this.state.imageToSaveId = null;
+                    window._accurateImgToSave = null;
                 };
                 boardList.prepend(boardItem);
             });
